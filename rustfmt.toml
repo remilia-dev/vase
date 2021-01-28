@@ -1,0 +1,27 @@
+# The old formatter has too few settings for this code base.
+required_version = "2.0.0-rc.2"
+# Prevents some 'chains' from being needlessly expanded.
+# Essentially it counts `self.x.do_something()` as a chain (self.x should be a single unit).
+chain_width = 70
+# The oddly specific value is because RustFmt incorrectly counts multi-byte characters.
+# Without it, src/util/char_ext.rs would have some inconsistent formatting.
+# I wish rustfmt could have a `grey area` where code could be formatted different ways,
+# and that way would be up to the programmer.
+fn_call_width = 58
+# Splitting up imports into a specific order is best practice in almost any language.
+group_imports = "StdExternalCrate"
+# Multi-imports should be layed out vertically. This will mainly apply to crate imports.
+# I would use VerticalHorizontal but I prefer spaces inside the {} when horizontal.
+imports_layout = "Vertical"
+# Trailing commas keeps match blocks consistent.
+match_block_trailing_comma = true
+# The overflow uses less vertical space and is just as clear.
+overflow_delimited_expr = true
+# Modules should be in alphabetical order.
+reorder_modules = true
+# Small-ish struct literals should generally be on one line.
+struct_lit_width = 40
+# field: field is just redundant.
+use_field_init_shorthand = true
+# There are few multi-condition wheres, so a single line is fine.
+where_single_line = true
