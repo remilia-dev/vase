@@ -17,3 +17,10 @@ unicode-normalization = "0.1.16"
 thread_local = "1.1.2"
 walkdir = "2"
 parking_lot = "0.11.1"
+
+[dev-dependencies]
+criterion = { version = "0.3", features = ['real_blackbox', 'html_reports'] }
+
+[[bench]]
+name = "bench_main"
+harness = false
