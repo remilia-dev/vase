@@ -18,3 +18,9 @@ The current plan is for each stage of compilation to be parallelized:
 
 Due to the all-at-once nature of the compiler, more memory will be used
 than other compilers.
+
+## License
+
+Right now the code is licensed under GPLv3 or later (see LICENSE).
+However, I do wish to retain the ability to re-license the whole
+project should I desire to.

@@ -1,3 +1,6 @@
+// Copyright 2021. remilia-dev
+// This source code is licensed under GPLv3 or any later version.
+
 /// A trait that adds some extension methods to [char].
 pub trait CharExt: private::Sealed {
     /// Returns true if the a char value is within the character range `'0'..='7'`.

@@ -1,3 +1,6 @@
+// Copyright 2021. remilia-dev
+// This source code is licensed under GPLv3 or any later version.
+
 /// A utility to build a `str` character by character.
 pub struct StringBuilder {
     buffer: Vec<u8>,

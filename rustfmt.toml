@@ -13,6 +13,8 @@ group_imports = "StdExternalCrate"
 # Multi-imports should be layed out vertically. This will mainly apply to crate imports.
 # I would use VerticalHorizontal but I prefer spaces inside the {} when horizontal.
 imports_layout = "Vertical"
+# A small copyright/license header isn't bad.
+license_template_path = "file_header"
 # Trailing commas keeps match blocks consistent.
 match_block_trailing_comma = true
 # The overflow uses less vertical space and is just as clear.

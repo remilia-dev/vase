@@ -1,3 +1,6 @@
+// Copyright 2021. remilia-dev
+// This source code is licensed under GPLv3 or any later version.
+
 // NOTE: Some other crate's sync utilities are exported here to allow for easy changes and to provide a shortcut.
 
 // Standard library re-exports

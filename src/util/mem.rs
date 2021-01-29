@@ -1,3 +1,5 @@
+// Copyright 2021. remilia-dev
+// This source code is licensed under GPLv3 or any later version.
 use std::ptr::NonNull;
 
 /// Allocates the given data on the heap by making a box and returning the pointer inside.

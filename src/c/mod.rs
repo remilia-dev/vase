@@ -1,3 +1,5 @@
+// Copyright 2021. remilia-dev
+// This source code is licensed under GPLv3 or any later version.
 pub use char_reader::*;
 pub use compile_env::CCompileEnv;
 pub use lexer::*;

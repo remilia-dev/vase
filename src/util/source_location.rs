@@ -1,3 +1,6 @@
+// Copyright 2021. remilia-dev
+// This source code is licensed under GPLv3 or any later version.
+
 /// Represents a location in a file/string by its line and column.
 ///
 /// Both line and column are u32. I think 4GBs worth of lines or columns is enough.

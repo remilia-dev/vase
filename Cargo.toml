@@ -2,7 +2,12 @@
 name = "vase"
 version = "0.0.1"
 authors = ["remilia.dev"]
+description = "A multi-threaded C compiler."
+readme = "README.md"
+license = "GPL-3.0-or-later"
+license-file = "LICENSE"
 edition = "2018"
+publish = false
 
 [dependencies]
 arc-swap = "1.2.0"
