@@ -25,10 +25,12 @@ pub use parking_lot::{
 };
 
 // Re-exports of this crate's sync utilities
+pub use self::atomic_arc::AtomicArc;
 pub use self::atomic_box::AtomicBox;
 pub use self::once_array::OnceArray;
 pub use self::work_queue::WorkQueue;
 
+mod atomic_arc;
 mod atomic_box;
 mod once_array;
 mod work_queue;

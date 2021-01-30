@@ -112,9 +112,9 @@ impl<T> AtomicBox<T> {
     /// If the box already contains a value, the value given will be dropped.
     /// If the box was empty, the box will now contained the given value.
     ///
-    /// This function returns a result indicated whether the swap occurred (Ok) or not (Err).
-    /// Regardless, the value contained in the result is a reference to the current value
-    /// contained in this box.
+    /// This function returns a result that indicates whether the swap occurred (Ok)
+    /// or not (Err). Regardless, the value contained in the result is a reference
+    /// to the current value contained in this box.
     pub fn try_set_if_null(
         &self,
         val: Box<T>,
@@ -154,6 +154,7 @@ impl<T> Drop for AtomicBox<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::DropTester;
 
     #[test]
     fn atomic_box_same_size_as_box() {
@@ -169,6 +170,13 @@ mod tests {
     }
 
     #[test]
+    fn dropping_occurs() {
+        let mut flag = false;
+        let _ = AtomicBox::new(DropTester::new(&mut flag));
+        assert!(flag, "AtomicBox did not drop its value.");
+    }
+
+    #[test]
     fn new_boxes_from_values_works() {
         const TEST_VAL: usize = 10;
         let mut ab1 = AtomicBox::new(TEST_VAL);
@@ -181,5 +189,14 @@ mod tests {
     fn from_raw_with_null_is_empty() {
         let mut ab1 = unsafe { AtomicBox::<usize>::from_raw(null_mut()) };
         assert_eq!(ab1.as_mut(), None);
+    }
+
+    #[test]
+    fn try_set_returns_ok_when_empty() {
+        let ab = AtomicBox::<usize>::empty();
+        assert!(
+            ab.try_set_if_null(Box::new(1), Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok()
+        );
     }
 }

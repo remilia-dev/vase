@@ -52,6 +52,7 @@ pub fn make_static_array<T, const LENGTH: usize>(val_fn: &dyn Fn() -> T) -> [T; 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::DropTester;
 
     #[test]
     fn allocate_works_properly() {
@@ -70,26 +71,13 @@ mod tests {
 
     #[test]
     fn free_runs_drop() {
-        use std::cell::RefCell;
-        use std::rc::Rc;
-
-        struct DropTest {
-            drop_flag: Rc<RefCell<bool>>,
-        }
-        impl Drop for DropTest {
-            fn drop(&mut self) {
-                *(self.drop_flag.as_ref().borrow_mut()) = true;
-            }
-        }
-
-        let drop_flag = Rc::new(RefCell::new(false));
-
-        let ptr = alloc(DropTest { drop_flag: drop_flag.clone() });
+        let mut flag = false;
+        let ptr = alloc(DropTester::new(&mut flag));
         unsafe {
             free(ptr);
         }
 
-        assert!(*drop_flag.as_ref().borrow());
+        assert!(flag, "free did not properly drop the pointer.");
     }
 
     #[test]
