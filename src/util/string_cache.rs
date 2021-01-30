@@ -6,11 +6,10 @@ use std::ptr::{
     NonNull,
 };
 
-use arc_swap::ArcSwapOption;
-
 use crate::{
     sync::{
         Arc,
+        AtomicArc,
         AtomicBool,
         AtomicPtr,
         AtomicU8,
@@ -186,14 +185,14 @@ struct TrieNodeLimited<const NODE_COUNT: usize> {
     node_values: [AtomicU8; NODE_COUNT],
     nodes: [TrieNodePtr; NODE_COUNT],
     chain: TrieNodePtr,
-    value: ArcSwapOption<CachedStringData>,
+    value: AtomicArc<CachedStringData>,
 }
 impl<const NODE_COUNT: usize> TrieNodeLimited<NODE_COUNT> {
     fn new_empty() -> Self {
         TrieNodeLimited {
             size: NODE_COUNT as u8,
             is_end_node: AtomicBool::new(false),
-            value: ArcSwapOption::empty(),
+            value: AtomicArc::empty(),
             node_values: make_static_array::<_, NODE_COUNT>(&|| AtomicU8::new(EMPTY_SLOT_VAL)),
             nodes: make_static_array::<_, NODE_COUNT>(&|| TrieNodePtr::new_null()),
             chain: TrieNodePtr::new_null(),
@@ -203,7 +202,7 @@ impl<const NODE_COUNT: usize> TrieNodeLimited<NODE_COUNT> {
     fn new_end(value: CachedString, depth: usize) -> Self {
         let mut new_node = TrieNodeLimited::new_empty();
         *new_node.is_end_node.get_mut() = value.string.len() != depth;
-        new_node.value.store(Some(value));
+        new_node.value.set(value);
         new_node
     }
 
@@ -220,8 +219,8 @@ impl<const NODE_COUNT: usize> TrieNodeLimited<NODE_COUNT> {
         if !self.is_end_node.load(Ordering::SeqCst) {
             return None;
         }
-
-        let end_value = self.value.load_full()?;
+        // OPTIMIZATION: Could we use Ordering::Acquire here?
+        let end_value = self.value.load_arc(Ordering::SeqCst)?;
         let first_diff = match data.difference_from(&end_value) {
             // This was actually the value we're looking for
             None => return Some(end_value),
@@ -249,8 +248,8 @@ impl<const NODE_COUNT: usize> TrieNodeLimited<NODE_COUNT> {
         // If the node is not null, then this node is no longer an end node.
         // OPTIMIZATION: If the set succeeds, we could skip right to the end of the chain.
         let _ = self.nodes[reserved_spot].set_if_null(chain_head);
-
-        self.value.compare_and_swap(&end_value, None::<Arc<CachedStringData>>);
+        // OPTIMIZATION: Would other orderings work here?
+        self.value.set_if_none(end_value, Ordering::SeqCst, Ordering::SeqCst);
         // OPTIMIZATION: Could we use Ordering::Release here?
         self.is_end_node.store(false, Ordering::SeqCst);
 
@@ -258,13 +257,13 @@ impl<const NODE_COUNT: usize> TrieNodeLimited<NODE_COUNT> {
     }
 
     fn load_or_create_value(&self, data: &CacheRequest) -> CachedString {
-        match self.value.load_full() {
+        match self.value.load_arc(Ordering::SeqCst) {
             Some(x) => x,
             None => {
-                let null_value = null_mut::<CachedStringData>();
-                let new_value = Option::from(data.new_cached());
-                self.value.compare_and_swap(null_value, new_value);
-                self.value.load_full().expect("Missing value.")
+                let new_value = data.new_cached();
+                // OPTIMIZATION: Make a version of set_if_none that returns the Arc.
+                self.value.set_if_none(new_value, Ordering::SeqCst, Ordering::SeqCst);
+                self.value.load_arc(Ordering::SeqCst).expect("Missing value.")
             },
         }
     }

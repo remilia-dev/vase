@@ -7,8 +7,6 @@ use std::ptr::{
     NonNull,
 };
 
-use arc_swap::AsRaw;
-
 use crate::sync::{
     Arc,
     AtomicPtr,
@@ -37,7 +35,7 @@ impl<T> AtomicArc<T> {
         // NOTE: into_raw consumes the Arc without decrementing.
         // AtomicArc now has 1 strong relationship with the Arc.
         AtomicArc {
-            ptr: AtomicPtr::new(Arc::into_raw(val).as_raw()),
+            ptr: AtomicPtr::new(Arc::into_raw(val) as *mut T),
             _phantom: PhantomData,
         }
     }
@@ -73,7 +71,7 @@ impl<T> AtomicArc<T> {
             unsafe { Arc::decr_strong_count(ptr.as_ptr()) }
         }
         // We consume the Arc and take its place
-        *self.ptr.get_mut() = Arc::into_raw(val).as_raw();
+        *self.ptr.get_mut() = Arc::into_raw(val) as *mut T;
     }
     /// Loads the potential value in the Arc using the given ordering.
     ///
@@ -124,7 +122,7 @@ impl<T> AtomicArc<T> {
         success: Ordering,
         failure: Ordering,
     ) -> Result<&T, &T> {
-        let raw_new_val = Arc::as_ptr(&to).as_raw();
+        let raw_new_val = Arc::as_ptr(&to) as *mut T;
         match self.ptr.compare_exchange(null_mut(), raw_new_val, success, failure) {
             Ok(ptr) => {
                 // NOTE: We have to forget the old Arc since it's ptr is now in self.

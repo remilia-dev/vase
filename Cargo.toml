@@ -9,13 +9,12 @@ edition = "2018"
 publish = false
 
 [dependencies]
-arc-swap = "1.2.0"
-rayon = "1.5"
 memmap2 = "0.2.0"
-unicode-normalization = "0.1.16"
-thread_local = "1.1.2"
-walkdir = "2"
 parking_lot = "0.11.1"
+rayon = "1.5"
+thread_local = "1.1.2"
+unicode-normalization = "0.1.16"
+walkdir = "2"
 
 [dev-dependencies]
 criterion = { version = "0.3", features = ['real_blackbox', 'html_reports'] }
