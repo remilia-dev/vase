@@ -7,7 +7,7 @@ use unicode_normalization::UnicodeNormalization;
 
 use crate::{
     c::{
-        char_reader::*,
+        file_reader::*,
         token::*,
         CCompileEnv,
         CLexerError,
@@ -36,7 +36,7 @@ pub struct CLexer<'a> {
     mode: CLexerMode,
     env: &'a CCompileEnv,
     include_callback: CIncludeCallback<'a>,
-    reader: CharReader,
+    reader: CFileReader,
     loaded_path: Option<Arc<Path>>,
     str_builder: StringBuilder,
     norm_buffer: StringBuilder,
@@ -48,7 +48,7 @@ impl<'a> CLexer<'a> {
             mode: CLexerMode::Normal,
             env,
             include_callback,
-            reader: CharReader::new(),
+            reader: CFileReader::new(),
             loaded_path: None,
             str_builder: StringBuilder::new(),
             norm_buffer: StringBuilder::new(),
