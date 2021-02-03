@@ -40,6 +40,7 @@ pub enum CTokenKind {
         inc_type: CIncludeType,
         path: CachedString,
     },
+    Message(Arc<Box<str>>),
     Identifier(CachedString),
     Number {
         num_type: CNumberType,

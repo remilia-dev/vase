@@ -27,6 +27,7 @@ enum CLexerMode {
     Normal,
     Preprocessor,
     Include { next: bool },
+    Message,
 }
 
 pub type CIncludeCallback<'a> =
@@ -135,6 +136,9 @@ impl<'a> CLexer<'a> {
                 },
                 '"' | '<' if matches!(self.mode, CLexerMode::Include { .. }) => {
                     self.lex_include(&mut tokens, character)
+                },
+                c if matches!(self.mode, CLexerMode::Message) => {
+                    self.lex_message(c)
                 },
                 c if r"~!@#%^&*()[]{}-+=:;\|,.<>/?".contains(c) => {
                     self.lex_symbol(&mut tokens, c, have_skipped_whitespace)
@@ -363,12 +367,11 @@ impl<'a> CLexer<'a> {
             self.link_stack.push(tokens.len());
         }
 
-        self.mode = if pre_type.is_include() {
-            CLexerMode::Include {
-                next: pre_type == CPreprocessorType::IncludeNext,
-            }
-        } else {
-            CLexerMode::Preprocessor
+        self.mode = match pre_type {
+            CPreprocessorType::Include => CLexerMode::Include { next: false },
+            CPreprocessorType::IncludeNext => CLexerMode::Include { next: true },
+            CPreprocessorType::Error | CPreprocessorType::Warning => CLexerMode::Message,
+            _ => CLexerMode::Preprocessor,
         };
 
         CTokenKind::Preprocessor(pre_type)
@@ -414,6 +417,20 @@ impl<'a> CLexer<'a> {
         tokens.add_reference(&path, inc_id);
 
         CTokenKind::IncludePath { inc_type, path }
+    }
+
+    fn lex_message(&mut self, first_char: char) -> CTokenKind {
+        self.str_builder.clear();
+        self.str_builder.append_char(first_char);
+        while let CharResult::Value(char, ..) = self.reader.move_forward() {
+            if char == '\n' {
+                break;
+            }
+            self.str_builder.append_char(char)
+        }
+
+        self.mode = CLexerMode::Normal;
+        CTokenKind::Message(Arc::new(self.str_builder.current_as_box()))
     }
 
     fn lex_string(&mut self, str_type: CStringType, opening_char: char) -> CTokenKind {
