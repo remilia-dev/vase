@@ -36,7 +36,8 @@ pub struct CCompileEnv {
     cached_to_keywords: HashMap<CachedString, CTokenKind>,
     cached_to_preprocessor: HashMap<CachedString, CPreprocessorType>,
     cached_to_str_prefix: HashMap<CachedString, CStringType>,
-    file_id_to_tokens: OnceArray<Result<CTokenStack, CLexerError>>,
+    // OPTIMIZATION: Maybe OnceArray should operate on Arcs rather than boxes.
+    file_id_to_tokens: OnceArray<Result<Arc<CTokenStack>, CLexerError>>,
 }
 impl CCompileEnv {
     pub fn new(settings: CCompileSettings) -> CCompileEnv {
@@ -72,7 +73,7 @@ impl CCompileEnv {
     pub fn cached_to_str_prefix(&self) -> &HashMap<CachedString, CStringType> {
         &self.cached_to_str_prefix
     }
-    pub fn file_id_to_tokens(&self) -> &OnceArray<Result<CTokenStack, CLexerError>> {
+    pub fn file_id_to_tokens(&self) -> &OnceArray<Result<Arc<CTokenStack>, CLexerError>> {
         &self.file_id_to_tokens
     }
 
