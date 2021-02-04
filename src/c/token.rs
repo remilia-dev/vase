@@ -31,11 +31,8 @@ impl CToken {
 }
 
 #[repr(u8)]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CTokenKind {
-    Preprocessor(CPreprocessorType),
-    UnknownPreprocessor(CachedString),
-    PreprocessorEnd,
     IncludePath {
         inc_type: CIncludeType,
         path: CachedString,
@@ -53,6 +50,38 @@ pub enum CTokenKind {
         str_data: Arc<Box<str>>,
     },
     EOF,
+
+    // == Begin Preprocessors
+    PreIf {
+        link: usize,
+    },
+    PreIfDef {
+        link: usize,
+    },
+    PreIfNDef {
+        link: usize,
+    },
+    PreElif {
+        link: usize,
+    },
+    PreElse {
+        link: usize,
+    },
+    PreEndIf,
+    PreDefine,
+    PreUndef,
+    PreLine,
+    PreError,
+    PrePragma,
+    PreBlank,
+    PreInclude,
+    // Other
+    PreEnd,
+    PreUnknown(CachedString),
+    // GCC Extensions
+    PreIncludeNext,
+    PreWarning,
+    // == End Preprocessors
 
     // == Begin Keywords
     Auto,
@@ -136,86 +165,45 @@ pub enum CTokenKind {
     RBrace {
         alt: bool,
     },
-    /// `.`
-    Dot,
-    /// `->`
-    Arrow,
-    /// `++`
-    PlusPlus,
-    /// `--`
-    MinusMinus,
+
     /// `&`
     Amp,
-    /// `*`
-    Star,
-    /// `+`
-    Plus,
-    /// `-`
-    Minus,
-    /// `~`
-    Tilde,
-    /// `!`
-    Bang,
-    /// `/`
-    Slash,
-    /// `%`
-    Percent,
-    /// `<<`
-    LShift,
-    /// `>>`
-    RShift,
-    /// `<`
-    LAngle,
-    /// `>`
-    RAngle,
-    /// `<=`
-    LAngleEqual,
-    /// `>=`
-    RAngleEqual,
-    /// `==`
-    EqualEqual,
-    /// `!=`
-    BangEqual,
-    /// `^`
-    Carrot,
-    /// `|`
-    Bar,
+    /// `&=`
+    AmpEqual,
     /// `&&`
     AmpAmp,
+    /// `->`
+    Arrow,
+    /// `@`
+    At,
+    /// `\`
+    Backslash,
+    /// `!`
+    Bang,
+    /// `!=`
+    BangEqual,
+    /// `|`
+    Bar,
+    /// `|=`
+    BarEqual,
     /// `||`
     BarBar,
-    /// `?`
-    QMark,
+    /// `^`
+    Carrot,
+    /// `^=`
+    CarrotEqual,
     /// `:`
     Colon,
-    /// `;`
-    Semicolon,
+    /// `,`
+    Comma,
+    /// `.`
+    Dot,
     /// `...`
     DotDotDot,
     /// `=`
     Equal,
-    /// `*=`
-    StarEqual,
-    /// `/=`
-    SlashEqual,
-    /// `%=`
-    PercentEqual,
-    /// `+=`
-    PlusEqual,
-    /// `-=`
-    MinusEqual,
-    /// `<<=`
-    LShiftEqual,
-    /// `>>=`
-    RShiftEqual,
-    /// `&=`
-    AmpEqual,
-    /// `^=`
-    CarrotEqual,
-    /// `|=`
-    BarEqual,
-    /// `,`
-    Comma,
+    /// `==`
+    EqualEqual,
     /// `#` when alt is false
     ///
     /// `%:` when alt is true
@@ -228,70 +216,80 @@ pub enum CTokenKind {
     HashHash {
         alt: bool,
     },
-    /// `@`
-    At,
-    /// `\`
-    Backslash,
+    /// `-`
+    Minus,
+    /// `-=`
+    MinusEqual,
+    /// `--`
+    MinusMinus,
+    /// `<`
+    LAngle,
+    /// `<=`
+    LAngleEqual,
+    /// `<<`
+    LShift,
+    /// `<<=`
+    LShiftEqual,
+    /// `%`
+    Percent,
+    /// `%=`
+    PercentEqual,
+    /// `+`
+    Plus,
+    /// `+=`
+    PlusEqual,
+    /// `++`
+    PlusPlus,
+    /// `?`
+    QMark,
+    /// `>`
+    RAngle,
+    /// `>=`
+    RAngleEqual,
+    /// `>>`
+    RShift,
+    /// `>>=`
+    RShiftEqual,
+    /// `;`
+    Semicolon,
+    /// `/`
+    Slash,
+    /// `/=`
+    SlashEqual,
+    /// `*`
+    Star,
+    /// `*=`
+    StarEqual,
+    /// `~`
+    Tilde,
     // == End Symbols
 }
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-#[repr(u8)]
-pub enum CPreprocessorType {
-    If { link: u32 },
-    IfDef { link: u32 },
-    IfNDef { link: u32 },
-    Elif { link: u32 },
-    Else { link: u32 },
-    EndIf,
-    Define,
-    Undef,
-    Line,
-    Error,
-    Pragma,
-    Blank,
-    Include,
-    IncludeNext, // GCC Extension
-    Warning, // GCC Extension
-    // ## MISSING:
-    // SCCS and IDENT (Unofficial GCC Extension)
-    // Assert/Unassert (Deprecated GCC Extension)
-}
-impl CPreprocessorType {
-    pub fn is_include(&self) -> bool {
-        return matches!(
-            self,
-            CPreprocessorType::Include | CPreprocessorType::IncludeNext
-        );
-    }
-
+impl CTokenKind {
     pub fn is_linking(&self) -> bool {
         return matches!(
             self,
-            CPreprocessorType::If { .. }
-                | CPreprocessorType::IfDef { .. }
-                | CPreprocessorType::IfNDef { .. }
-                | CPreprocessorType::Elif { .. }
-                | CPreprocessorType::Else { .. }
+            CTokenKind::PreIf { .. }
+                | CTokenKind::PreIfDef { .. }
+                | CTokenKind::PreIfNDef { .. }
+                | CTokenKind::PreElif { .. }
+                | CTokenKind::PreElse { .. }
         );
     }
 
     pub fn ends_a_link(&self) -> bool {
         return matches!(
             self,
-            CPreprocessorType::Else { .. }
-                | CPreprocessorType::Elif { .. }
-                | CPreprocessorType::EndIf { .. }
+            CTokenKind::PreElse { .. } | CTokenKind::PreElif { .. } | CTokenKind::PreEndIf { .. }
         );
     }
 
-    pub fn set_link(&mut self, val: u32) {
+    pub fn set_link(&mut self, val: usize) {
         match self {
-            CPreprocessorType::If { link }
-            | CPreprocessorType::IfDef { link }
-            | CPreprocessorType::IfNDef { link }
-            | CPreprocessorType::Elif { link }
-            | CPreprocessorType::Else { link } => *link = val,
+            CTokenKind::PreIf { link }
+            | CTokenKind::PreIfDef { link }
+            | CTokenKind::PreIfNDef { link }
+            | CTokenKind::PreElif { link }
+            | CTokenKind::PreElse { link } => *link = val,
             _ => {},
         }
     }
@@ -356,7 +354,7 @@ impl CNumberType {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
 pub enum CStringType {
     DEFAULT,
@@ -364,4 +362,21 @@ pub enum CStringType {
     WCHAR,
     U16,
     U32,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ensure_token_is_at_most_32_bytes() {
+        // Testing limits the size of CToken since even small size increases will result in
+        // higher memory usage (and not by a tiny amount).
+        let size = std::mem::size_of::<CToken>();
+        assert!(
+            size <= 32,
+            "CToken is {} bytes when it should be 32 or less.",
+            size
+        );
+    }
 }

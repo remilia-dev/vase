@@ -14,7 +14,6 @@ use crate::{
         CIncludeType,
         CLangVersion,
         CLexerError,
-        CPreprocessorType,
         CStringType,
         CTokenKind,
         CTokenStack,
@@ -34,7 +33,7 @@ pub struct CCompileEnv {
     threads: Arc<ThreadPool>,
     cache: StringCache,
     cached_to_keywords: HashMap<CachedString, CTokenKind>,
-    cached_to_preprocessor: HashMap<CachedString, CPreprocessorType>,
+    cached_to_preprocessor: HashMap<CachedString, CTokenKind>,
     cached_to_str_prefix: HashMap<CachedString, CStringType>,
     // OPTIMIZATION: Maybe OnceArray should operate on Arcs rather than boxes.
     file_id_to_tokens: OnceArray<Result<Arc<CTokenStack>, CLexerError>>,
@@ -67,7 +66,7 @@ impl CCompileEnv {
     pub fn cached_to_keywords(&self) -> &HashMap<CachedString, CTokenKind> {
         &self.cached_to_keywords
     }
-    pub fn cached_to_preprocessor(&self) -> &HashMap<CachedString, CPreprocessorType> {
+    pub fn cached_to_preprocessor(&self) -> &HashMap<CachedString, CTokenKind> {
         &self.cached_to_preprocessor
     }
     pub fn cached_to_str_prefix(&self) -> &HashMap<CachedString, CStringType> {
@@ -122,85 +121,86 @@ impl CCompileEnv {
 }
 
 fn update_cache_maps(env: &mut CCompileEnv) {
+    use CTokenKind::*;
     let version = env.settings.version;
 
     let mut map_keyword = |s: &str, kind: CTokenKind| {
         let cached = env.cache.get_or_cache(s);
         env.cached_to_keywords.insert(cached, kind);
     };
-    map_keyword("auto", CTokenKind::Auto);
-    map_keyword("break", CTokenKind::Break);
-    map_keyword("case", CTokenKind::Case);
-    map_keyword("char", CTokenKind::Char);
-    map_keyword("const", CTokenKind::Const);
-    map_keyword("continue", CTokenKind::Continue);
-    map_keyword("default", CTokenKind::Default);
-    map_keyword("do", CTokenKind::Do);
-    map_keyword("double", CTokenKind::Double);
-    map_keyword("else", CTokenKind::Else);
-    map_keyword("enum", CTokenKind::Enum);
-    map_keyword("extern", CTokenKind::Extern);
-    map_keyword("float", CTokenKind::Float);
-    map_keyword("for", CTokenKind::For);
-    map_keyword("goto", CTokenKind::Goto);
-    map_keyword("if", CTokenKind::If);
-    map_keyword("int", CTokenKind::Int);
-    map_keyword("long", CTokenKind::Long);
-    map_keyword("register", CTokenKind::Register);
-    map_keyword("return", CTokenKind::Return);
-    map_keyword("short", CTokenKind::Short);
-    map_keyword("signed", CTokenKind::Signed);
-    map_keyword("sizeof", CTokenKind::Sizeof);
-    map_keyword("static", CTokenKind::Static);
-    map_keyword("struct", CTokenKind::Struct);
-    map_keyword("switch", CTokenKind::Switch);
-    map_keyword("typedef", CTokenKind::Typedef);
-    map_keyword("union", CTokenKind::Union);
-    map_keyword("unsigned", CTokenKind::Unsigned);
-    map_keyword("void", CTokenKind::Void);
-    map_keyword("volatile", CTokenKind::Volatile);
-    map_keyword("while", CTokenKind::While);
+    map_keyword("auto", Auto);
+    map_keyword("break", Break);
+    map_keyword("case", Case);
+    map_keyword("char", Char);
+    map_keyword("const", Const);
+    map_keyword("continue", Continue);
+    map_keyword("default", Default);
+    map_keyword("do", Do);
+    map_keyword("double", Double);
+    map_keyword("else", Else);
+    map_keyword("enum", Enum);
+    map_keyword("extern", Extern);
+    map_keyword("float", Float);
+    map_keyword("for", For);
+    map_keyword("goto", Goto);
+    map_keyword("if", If);
+    map_keyword("int", Int);
+    map_keyword("long", Long);
+    map_keyword("register", Register);
+    map_keyword("return", Return);
+    map_keyword("short", Short);
+    map_keyword("signed", Signed);
+    map_keyword("sizeof", Sizeof);
+    map_keyword("static", Static);
+    map_keyword("struct", Struct);
+    map_keyword("switch", Switch);
+    map_keyword("typedef", Typedef);
+    map_keyword("union", Union);
+    map_keyword("unsigned", Unsigned);
+    map_keyword("void", Void);
+    map_keyword("volatile", Volatile);
+    map_keyword("while", While);
     if version >= CLangVersion::C99 {
-        map_keyword("inline", CTokenKind::Inline);
-        map_keyword("restrict", CTokenKind::Restrict);
-        map_keyword("_Bool", CTokenKind::Bool);
-        map_keyword("_Complex", CTokenKind::Complex);
-        map_keyword("_Imaginary", CTokenKind::Imaginary);
-        map_keyword("_Pragma", CTokenKind::Pragma);
+        map_keyword("inline", Inline);
+        map_keyword("restrict", Restrict);
+        map_keyword("_Bool", Bool);
+        map_keyword("_Complex", Complex);
+        map_keyword("_Imaginary", Imaginary);
+        map_keyword("_Pragma", Pragma);
     }
     if version >= CLangVersion::C11 {
-        map_keyword("_Alignas", CTokenKind::Alignas);
-        map_keyword("_Alignof", CTokenKind::Alignof);
-        map_keyword("_Atomic", CTokenKind::Atomic);
-        map_keyword("_Generic", CTokenKind::Generic);
-        map_keyword("_Noreturn", CTokenKind::Noreturn);
-        map_keyword("_Static_assert", CTokenKind::StaticAssert);
-        map_keyword("_Thread_local", CTokenKind::ThreadLocal);
+        map_keyword("_Alignas", Alignas);
+        map_keyword("_Alignof", Alignof);
+        map_keyword("_Atomic", Atomic);
+        map_keyword("_Generic", Generic);
+        map_keyword("_Noreturn", Noreturn);
+        map_keyword("_Static_assert", StaticAssert);
+        map_keyword("_Thread_local", ThreadLocal);
     }
     if version >= CLangVersion::C23 {
-        map_keyword("_Decimal32", CTokenKind::Decimal32);
-        map_keyword("_Decimal64", CTokenKind::Decimal64);
-        map_keyword("_Decimal128", CTokenKind::Decimal128);
+        map_keyword("_Decimal32", Decimal32);
+        map_keyword("_Decimal64", Decimal64);
+        map_keyword("_Decimal128", Decimal128);
     }
 
-    let mut map_preprocessor = |s: &str, pre: CPreprocessorType| {
+    let mut map_preprocessor = |s: &str, pre: CTokenKind| {
         let cached = env.cache.get_or_cache(s);
         env.cached_to_preprocessor.insert(cached, pre);
     };
-    map_preprocessor("if", CPreprocessorType::If { link: u32::MAX });
-    map_preprocessor("ifdef", CPreprocessorType::IfDef { link: u32::MAX });
-    map_preprocessor("ifndef", CPreprocessorType::IfNDef { link: u32::MAX });
-    map_preprocessor("elif", CPreprocessorType::Elif { link: u32::MAX });
-    map_preprocessor("else", CPreprocessorType::Else { link: u32::MAX });
-    map_preprocessor("endif", CPreprocessorType::EndIf);
-    map_preprocessor("define", CPreprocessorType::Define);
-    map_preprocessor("undef", CPreprocessorType::Undef);
-    map_preprocessor("line", CPreprocessorType::Line);
-    map_preprocessor("error", CPreprocessorType::Error);
-    map_preprocessor("pragma", CPreprocessorType::Pragma);
-    map_preprocessor("include", CPreprocessorType::Include);
-    map_preprocessor("include_next", CPreprocessorType::IncludeNext);
-    map_preprocessor("warning", CPreprocessorType::Warning);
+    map_preprocessor("if", PreIf { link: usize::MAX });
+    map_preprocessor("ifdef", PreIfDef { link: usize::MAX });
+    map_preprocessor("ifndef", PreIfNDef { link: usize::MAX });
+    map_preprocessor("elif", PreElif { link: usize::MAX });
+    map_preprocessor("else", PreElse { link: usize::MAX });
+    map_preprocessor("endif", PreEndIf);
+    map_preprocessor("define", PreDefine);
+    map_preprocessor("undef", PreUndef);
+    map_preprocessor("line", PreLine);
+    map_preprocessor("error", PreError);
+    map_preprocessor("pragma", PrePragma);
+    map_preprocessor("include", PreInclude);
+    map_preprocessor("include_next", PreIncludeNext);
+    map_preprocessor("warning", PreWarning);
 
     let mut map_str_prefix = |s: &str, str: CStringType| {
         let cached = env.cache.get_or_cache(s);

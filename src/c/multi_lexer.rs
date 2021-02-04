@@ -63,7 +63,7 @@ impl CMultiLexer {
                     .get_or(|| RefCell::new(CLexer::new(&self.env, &include_callback)))
                     .borrow_mut();
                 let lexed_result = lexer.lex_file(slot, to_lex);
-                self.env.file_id_to_tokens().set(slot, lexed_result.map(|tokens| Arc::new(tokens) ));
+                self.env.file_id_to_tokens().set(slot, lexed_result.map(Arc::new));
             });
         }
     }
@@ -103,6 +103,7 @@ impl CMultiLexer {
     }
 }
 
+#[derive(Debug)]
 pub enum CLexerError {
     Utf8DecodeError(Utf8DecodeError),
     MissingIncludeError(CachedString),

@@ -172,7 +172,7 @@ impl<'a> CLexer<'a> {
             tokens.append(CToken::new(
                 self.reader.position(),
                 0,
-                CTokenKind::PreprocessorEnd,
+                CTokenKind::PreEnd,
             ));
         }
         self.reader.move_forward();
@@ -344,22 +344,22 @@ impl<'a> CLexer<'a> {
             CharResult::Value(val, ..) if val != '\n' => val,
             // If an error occurred, the EOF has been reached, or the end-of-line has been reached
             // we want to return a blank preprocessor instruction.
-            _ => return CTokenKind::Preprocessor(CPreprocessorType::Blank),
+            _ => return CTokenKind::PreBlank,
         };
 
         let pre_id = self.read_cached_identifier(first_char);
         let pre_type = match self.env.cached_to_preprocessor().get(&pre_id) {
             Some(pre_type) => pre_type.clone(),
-            None => return CTokenKind::UnknownPreprocessor(pre_id),
+            None => {
+                self.mode = CLexerMode::Preprocessor;
+                return CTokenKind::PreUnknown(pre_id);
+            },
         };
 
         if pre_type.ends_a_link() {
             let curr_index = tokens.len();
             match self.link_stack.pop() {
-                Some(index) => match tokens[index].kind_mut() {
-                    CTokenKind::Preprocessor(pre_type) => pre_type.set_link(curr_index as u32),
-                    _ => panic!("Token linking stack linked to a non-preprocessor instruction!"),
-                },
+                Some(index) => tokens[index].kind_mut().set_link(curr_index),
                 None => {
                     // TODO: Error about not-properly ended linking preprocessor
                     println!("TODO: Warn about not-properly ended linking preprocessor");
@@ -371,13 +371,13 @@ impl<'a> CLexer<'a> {
         }
 
         self.mode = match pre_type {
-            CPreprocessorType::Include => CLexerMode::Include { next: false },
-            CPreprocessorType::IncludeNext => CLexerMode::Include { next: true },
-            CPreprocessorType::Error | CPreprocessorType::Warning => CLexerMode::Message,
+            CTokenKind::PreInclude => CLexerMode::Include { next: false },
+            CTokenKind::PreIncludeNext => CLexerMode::Include { next: true },
+            CTokenKind::PreError | CTokenKind::PreWarning => CLexerMode::Message,
             _ => CLexerMode::Preprocessor,
         };
 
-        CTokenKind::Preprocessor(pre_type)
+        pre_type
     }
 
     fn lex_include(&mut self, tokens: &mut CTokenStack, include_start: char) -> CTokenKind {
