@@ -137,6 +137,11 @@ impl<'a> CLexer<'a> {
                     self.lex_comment(true);
                     continue;
                 },
+                '\n' => {
+                    self.end_line(&mut tokens);
+                    self.at_start_of_line = true;
+                    continue;
+                },
                 '"' | '<' if matches!(self.mode, CLexerMode::Include { .. }) => {
                     self.lex_include(&mut tokens, character)
                 },
@@ -146,11 +151,6 @@ impl<'a> CLexer<'a> {
                 },
                 '\'' | '"' => self.lex_string(CStringType::DEFAULT, character),
                 c if c.is_ascii_digit() => self.lex_number(false, c),
-                '\n' => {
-                    self.end_line(&mut tokens);
-                    self.at_start_of_line = true;
-                    continue;
-                },
                 c => self.lex_identifier(c),
             };
 
@@ -169,11 +169,7 @@ impl<'a> CLexer<'a> {
     fn end_line(&mut self, tokens: &mut CTokenStack) {
         if self.mode != CLexerMode::Normal {
             self.mode = CLexerMode::Normal;
-            tokens.append(CToken::new(
-                self.reader.position(),
-                0,
-                CTokenKind::PreEnd,
-            ));
+            tokens.append(CToken::new(self.reader.position(), 0, CTokenKind::PreEnd));
         }
         self.reader.move_forward();
     }
@@ -321,7 +317,7 @@ impl<'a> CLexer<'a> {
             },
             '@' => CTokenKind::At,
             '\\' => CTokenKind::Backslash,
-            _ => panic!(
+            _ => unreachable!(
                 "c_lex_symbol should never lex starting on the character {}.",
                 first_char
             ),

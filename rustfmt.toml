@@ -27,3 +27,9 @@ struct_lit_width = 40
 use_field_init_shorthand = true
 # There are few multi-condition wheres, so a single line is fine.
 where_single_line = true
+
+# Some tests use weird formatting to make it easier to read.
+ignore = [
+    "tests/c/lexer/test_symbols.rs",
+    "tests/c/lexer/test_preprocessor.rs",
+]
