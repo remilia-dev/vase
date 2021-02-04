@@ -29,6 +29,7 @@ use crate::{
 /// never spins.
 ///
 /// This struct uses a trie, also known as a prefix tree, internally.
+#[derive(Debug)]
 pub struct StringCache {
     root: TrieNodeLimited<128>,
 }
@@ -97,6 +98,11 @@ impl CachedStringData {
     /// There should only be one empty string per cache.
     pub fn is_empty(&self) -> bool {
         self.string.is_empty()
+    }
+    /// Returns the pointer to the string as a usize.
+    /// This can be used as a unique identification until the string is freed.
+    pub fn uniq_id(&self) -> usize {
+        self.string.as_ptr() as usize
     }
 }
 impl std::hash::Hash for CachedStringData {
@@ -179,21 +185,24 @@ impl<'a> CacheRequest<'a> {
 const EMPTY_SLOT_VAL: u8 = 255;
 
 #[repr(C)]
+#[derive(Debug)]
 struct TrieNodeLimited<const NODE_COUNT: usize> {
     size: u8,
     is_end_node: AtomicBool,
-    node_values: [AtomicU8; NODE_COUNT],
+    children: [AtomicU8; NODE_COUNT],
     nodes: [TrieNodePtr; NODE_COUNT],
     chain: TrieNodePtr,
-    value: AtomicArc<CachedStringData>,
+    end_value: AtomicArc<CachedStringData>,
+    node_value: AtomicArc<CachedStringData>,
 }
 impl<const NODE_COUNT: usize> TrieNodeLimited<NODE_COUNT> {
     fn new_empty() -> Self {
         TrieNodeLimited {
             size: NODE_COUNT as u8,
             is_end_node: AtomicBool::new(false),
-            value: AtomicArc::empty(),
-            node_values: make_static_array::<_, NODE_COUNT>(&|| AtomicU8::new(EMPTY_SLOT_VAL)),
+            end_value: AtomicArc::empty(),
+            node_value: AtomicArc::empty(),
+            children: make_static_array::<_, NODE_COUNT>(&|| AtomicU8::new(EMPTY_SLOT_VAL)),
             nodes: make_static_array::<_, NODE_COUNT>(&|| TrieNodePtr::new_null()),
             chain: TrieNodePtr::new_null(),
         }
@@ -201,15 +210,19 @@ impl<const NODE_COUNT: usize> TrieNodeLimited<NODE_COUNT> {
 
     fn new_end(value: CachedString, depth: usize) -> Self {
         let mut new_node = TrieNodeLimited::new_empty();
-        *new_node.is_end_node.get_mut() = value.string.len() != depth;
-        new_node.value.set(value);
+        if value.string.len() != depth {
+            *new_node.is_end_node.get_mut() = true;
+            new_node.end_value.set(value);
+        } else {
+            new_node.node_value.set(value);
+        }
         new_node
     }
 
     fn new_mid(node_val: usize, node: TrieNodePtr) -> Self {
         let mut new_node = TrieNodeLimited::new_empty();
         let node_index = node_val % NODE_COUNT;
-        *new_node.node_values[node_index].get_mut() = node_val as u8;
+        *new_node.children[node_index].get_mut() = node_val as u8;
         new_node.nodes[node_index].set(node);
         new_node
     }
@@ -220,17 +233,12 @@ impl<const NODE_COUNT: usize> TrieNodeLimited<NODE_COUNT> {
             return None;
         }
         // OPTIMIZATION: Could we use Ordering::Acquire here?
-        let end_value = self.value.load_arc(Ordering::SeqCst)?;
+        let end_value = self.end_value.load_arc(Ordering::SeqCst)?;
         let first_diff = match data.difference_from(&end_value) {
             // This was actually the value we're looking for
             None => return Some(end_value),
             Some(diff) => diff,
         };
-
-        if end_value.string.len() == data.depth {
-            // Another thread has replaced the 'empty value' but has yet to update is_empty
-            return None;
-        }
 
         let target_spot = end_value.string.as_bytes()[data.depth] as usize;
         let reserved_spot = match self.find_or_reserve_node_index(target_spot) {
@@ -239,7 +247,21 @@ impl<const NODE_COUNT: usize> TrieNodeLimited<NODE_COUNT> {
             Some(node_spot) => node_spot,
         };
 
-        let mut chain_head = TrieNodePtr::new_end(end_value.clone(), data.depth + first_diff);
+        let mut chain_head = match first_diff {
+            // In this case, the end value is being moved to a child node.
+            0 => TrieNodePtr::new_end(end_value, data.depth + 1),
+            // In this case, the end value will end up in a value-node.
+            diff if data.depth + diff == end_value.len() => {
+                TrieNodePtr::new_end(end_value, data.depth + first_diff)
+            },
+            // In this case, the end value is given its own node to differentiate from the requested value
+            _ => {
+                let diff_val = end_value.string().as_bytes()[data.depth + first_diff] as usize;
+                let chain_diff = TrieNodePtr::new_end(end_value, data.depth + first_diff + 1);
+                TrieNodePtr::new_mid(diff_val, chain_diff, data.depth + first_diff)
+            },
+        };
+
         for diff_pos in (1..first_diff).rev() {
             let node_val = data.byte_tail()[diff_pos] as usize;
             chain_head = TrieNodePtr::new_mid(node_val, chain_head, data.depth + diff_pos);
@@ -247,9 +269,8 @@ impl<const NODE_COUNT: usize> TrieNodeLimited<NODE_COUNT> {
 
         // If the node is not null, then this node is no longer an end node.
         // OPTIMIZATION: If the set succeeds, we could skip right to the end of the chain.
+        // This optimization would apply to all but the first_diff = 0 case.
         let _ = self.nodes[reserved_spot].set_if_null(chain_head);
-        // OPTIMIZATION: Would other orderings work here?
-        self.value.set_if_none(end_value, Ordering::SeqCst, Ordering::SeqCst);
         // OPTIMIZATION: Could we use Ordering::Release here?
         self.is_end_node.store(false, Ordering::SeqCst);
 
@@ -257,13 +278,14 @@ impl<const NODE_COUNT: usize> TrieNodeLimited<NODE_COUNT> {
     }
 
     fn load_or_create_value(&self, data: &CacheRequest) -> CachedString {
-        match self.value.load_arc(Ordering::SeqCst) {
+        match self.node_value.load_arc(Ordering::SeqCst) {
             Some(x) => x,
             None => {
                 let new_value = data.new_cached();
                 // OPTIMIZATION: Make a version of set_if_none that returns the Arc.
-                self.value.set_if_none(new_value, Ordering::SeqCst, Ordering::SeqCst);
-                self.value.load_arc(Ordering::SeqCst).expect("Missing value.")
+                self.node_value
+                    .set_if_none(new_value, Ordering::SeqCst, Ordering::SeqCst);
+                self.node_value.load_arc(Ordering::SeqCst).expect("Missing value.")
             },
         }
     }
@@ -272,7 +294,7 @@ impl<const NODE_COUNT: usize> TrieNodeLimited<NODE_COUNT> {
         // We start relative to start_val to hopefully make finding/reserving a slot quicker.
         let mut loop_index = start_val % NODE_COUNT;
         loop {
-            let slot = &self.node_values[loop_index];
+            let slot = &self.children[loop_index];
             // OPTIMIZATION: Could we use Ordering::Acquire here?
             let slot_val = slot.load(Ordering::SeqCst);
             if slot_val as usize == start_val {
@@ -310,10 +332,10 @@ impl<const NODE_COUNT: usize> TrieNodeLimited<NODE_COUNT> {
 }
 impl<const NODE_COUNT: usize> TrieNode for TrieNodeLimited<NODE_COUNT> {
     fn get_or_cache_string(&self, data: &mut CacheRequest) -> Result<CachedString, &dyn TrieNode> {
-        if let Some(value) = self.move_or_get_end_value(data) {
-            Result::Ok(value)
-        } else if data.len() == data.depth {
+        if data.len() == data.depth {
             Result::Ok(self.load_or_create_value(data))
+        } else if let Some(value) = self.move_or_get_end_value(data) {
+            Result::Ok(value)
         } else {
             self.find_next_node(data)
         }
@@ -468,6 +490,27 @@ impl Drop for TrieNodePtr {
         }
     }
 }
+impl std::fmt::Debug for TrieNodePtr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(raw) = NonNull::new(self.ptr.load(Ordering::SeqCst)) {
+            unsafe {
+                // SAFETY: The pointer is not null and there should be at least a byte to read.
+                return match raw.as_ref() {
+                    // SAFETY: TrieNodeLimited's first field should match its type.
+                    // SAFETY: This TrieNodePtr owns this pointer and can free it.
+                    16 => raw.cast::<TrieNodeLimited<16>>().as_ref().fmt(f),
+                    24 => raw.cast::<TrieNodeLimited<24>>().as_ref().fmt(f),
+                    32 => raw.cast::<TrieNodeLimited<32>>().as_ref().fmt(f),
+                    64 => raw.cast::<TrieNodeLimited<64>>().as_ref().fmt(f),
+                    128 => raw.cast::<TrieNodeLimited<128>>().as_ref().fmt(f),
+                    size => panic!("Unknown TrieNode size {}", size),
+                };
+            }
+        }
+
+        Ok(())
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -531,6 +574,32 @@ mod tests {
         assert_eq!(cache_foobar1, cache_foobar2);
         assert_eq!(cache_foobaz1, cache_foobaz2);
         assert_ne!(cache_foobar1, cache_foobaz1);
+    }
+
+    #[test]
+    fn string_cache_end_node_chain_works_2() {
+        let cache = StringCache::new();
+        // When an end node needs to be moved, it will pre-emptively generate as many nodes as it
+        // needs in the chain.
+
+        // This generates an 'i' end node with a value foobar.
+        let cache_if1 = cache.get_or_cache("if");
+        // This generates a ->f value-node to store the if.
+        // It will put int in a ->n end-node.
+        let cache_int1 = cache.get_or_cache("int");
+        // This will move int into a ->t value-node
+        // Inline will be put in a ->l end-node.
+        let cache_inline1 = cache.get_or_cache("inline");
+
+        // To verify that the chains weren't malformed, we get the same values from cache.
+        let cache_if2 = cache.get_or_cache("if");
+        let cache_int2 = cache.get_or_cache("int");
+        let cache_inline2 = cache.get_or_cache("inline");
+        assert_eq!(cache_if1, cache_if2);
+        assert_eq!(cache_int1, cache_int2);
+        assert_eq!(cache_inline1, cache_inline2);
+        assert_ne!(cache_if1, cache_inline1);
+        assert_ne!(cache_inline1, cache_int1);
     }
 
     #[test]
