@@ -35,6 +35,7 @@ pub type CIncludeCallback<'a> =
 
 pub struct CLexer<'a> {
     mode: CLexerMode,
+    at_start_of_line: bool,
     env: &'a CCompileEnv,
     include_callback: CIncludeCallback<'a>,
     reader: CFileReader,
@@ -47,6 +48,7 @@ impl<'a> CLexer<'a> {
     pub fn new(env: &'a CCompileEnv, include_callback: CIncludeCallback<'a>) -> CLexer<'a> {
         CLexer {
             mode: CLexerMode::Normal,
+            at_start_of_line: true,
             env,
             include_callback,
             reader: CFileReader::new(),
@@ -103,6 +105,7 @@ impl<'a> CLexer<'a> {
 
     #[must_use]
     fn lex(&mut self, file_id: FileId) -> CTokenStack {
+        self.at_start_of_line = true;
         self.mode = CLexerMode::Normal;
         self.str_builder.clear();
 
@@ -137,9 +140,7 @@ impl<'a> CLexer<'a> {
                 '"' | '<' if matches!(self.mode, CLexerMode::Include { .. }) => {
                     self.lex_include(&mut tokens, character)
                 },
-                c if matches!(self.mode, CLexerMode::Message) => {
-                    self.lex_message(c)
-                },
+                c if matches!(self.mode, CLexerMode::Message) => self.lex_message(c),
                 c if r"~!@#%^&*()[]{}-+=:;\|,.<>/?".contains(c) => {
                     self.lex_symbol(&mut tokens, c, have_skipped_whitespace)
                 },
@@ -147,6 +148,7 @@ impl<'a> CLexer<'a> {
                 c if c.is_ascii_digit() => self.lex_number(false, c),
                 '\n' => {
                     self.end_line(&mut tokens);
+                    self.at_start_of_line = true;
                     continue;
                 },
                 c => self.lex_identifier(c),
@@ -155,6 +157,7 @@ impl<'a> CLexer<'a> {
             let length = self.reader.char_distance_from(position);
 
             tokens.append(CToken::new(loc, length, kind));
+            self.at_start_of_line = false;
         }
 
         tokens.append(CToken::new(self.reader.position(), 0, CTokenKind::EOF));
@@ -330,7 +333,7 @@ impl<'a> CLexer<'a> {
     }
 
     fn lex_preprocessor(&mut self, tokens: &mut CTokenStack, alt_start: bool) -> CTokenKind {
-        if self.mode == CLexerMode::Preprocessor {
+        if self.mode == CLexerMode::Preprocessor || !self.at_start_of_line {
             return CTokenKind::Hash { alt: alt_start };
         }
 
