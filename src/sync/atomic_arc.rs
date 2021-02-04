@@ -1,5 +1,6 @@
 // Copyright 2021. remilia-dev
 // This source code is licensed under GPLv3 or any later version.
+use std::fmt;
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::ptr::{
@@ -153,6 +154,11 @@ impl<T> Drop for AtomicArc<T> {
             // SAFETY: This struct owns a reference count.
             unsafe { Arc::decr_strong_count(ptr.as_ptr()) }
         }
+    }
+}
+impl<T: fmt::Debug> fmt::Debug for AtomicArc<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.load(Ordering::SeqCst).fmt(f)
     }
 }
 

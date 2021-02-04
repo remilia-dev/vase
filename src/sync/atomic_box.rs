@@ -1,5 +1,6 @@
 // Copyright 2021. remilia-dev
 // This source code is licensed under GPLv3 or any later version.
+use std::fmt;
 use std::marker::PhantomData;
 use std::mem::swap;
 use std::ptr::{
@@ -148,6 +149,12 @@ impl<T> Drop for AtomicBox<T> {
                 Box::from_raw(raw.as_ptr());
             }
         }
+    }
+}
+
+impl<T: fmt::Debug> fmt::Debug for AtomicBox<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.load(Ordering::SeqCst).fmt(f)
     }
 }
 
