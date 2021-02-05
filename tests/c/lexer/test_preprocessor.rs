@@ -20,7 +20,7 @@ fn test_preprocessor_lexing() {
     let tokens = lexer.lex_bytes(0, TEST_CASE.as_bytes()).unwrap();
     let test_results = test_results(env.cache());
     for i in 0..tokens.len() {
-        assert_eq!(*tokens[i].kind(), test_results[i]);
+        assert_eq!(*tokens[i].kind(), test_results[i], "At index: {}", i);
     }
 }
 

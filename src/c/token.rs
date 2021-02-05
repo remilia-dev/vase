@@ -2,31 +2,40 @@
 // This source code is licensed under GPLv3 or any later version.
 use crate::{
     sync::Arc,
-    util::{
-        CachedString,
-        SourceLocation,
-    },
+    util::CachedString,
 };
 
 #[derive(Debug)]
 pub struct CToken {
-    loc: SourceLocation,
+    byte: u32,
+    byte_length: u32,
     kind: CTokenKind,
-    length: u32,
+    whitespace_before: bool,
 }
 impl CToken {
-    pub fn new(loc: SourceLocation, length: u32, kind: CTokenKind) -> CToken {
-        CToken { loc, length, kind }
+    pub fn new(byte: u32, byte_length: u32, kind: CTokenKind, whitespace_before: bool) -> CToken {
+        CToken {
+            byte,
+            byte_length,
+            kind,
+            whitespace_before,
+        }
     }
 
+    pub fn byte(&self) -> u32 {
+        self.byte
+    }
+    pub fn byte_length(&self) -> u32 {
+        self.byte_length
+    }
     pub fn kind(&self) -> &CTokenKind {
         &self.kind
     }
     pub fn kind_mut(&mut self) -> &mut CTokenKind {
         &mut self.kind
     }
-    pub fn length(&self) -> u32 {
-        self.length
+    pub fn whitespace_before(&self) -> bool {
+        self.whitespace_before
     }
 }
 
@@ -148,9 +157,7 @@ pub enum CTokenKind {
         alt: bool,
     },
     /// `(`
-    LParen {
-        whitespace_before: bool,
-    },
+    LParen,
     /// `)`
     RParen,
     /// `{` when alt is false
@@ -357,9 +364,9 @@ impl CNumberType {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
 pub enum CStringType {
-    DEFAULT,
+    Default,
     U8,
-    WCHAR,
+    WChar,
     U16,
     U32,
 }

@@ -209,5 +209,5 @@ fn update_cache_maps(env: &mut CCompileEnv) {
     map_str_prefix("u8", CStringType::U8);
     map_str_prefix("u", CStringType::U16);
     map_str_prefix("U", CStringType::U32);
-    map_str_prefix("L", CStringType::WCHAR);
+    map_str_prefix("L", CStringType::WChar);
 }

@@ -2,13 +2,13 @@
 // This source code is licensed under GPLv3 or any later version.
 use crate::util::{
     CharExt,
-    SourceLocation,
     Utf8DecodeError,
 };
 
 pub struct CFileReader {
-    line_chars: Vec<CharPos>,
+    line_chars: Vec<(char, u32)>,
     position: usize,
+    last_byte: u32,
 }
 
 impl CFileReader {
@@ -16,6 +16,7 @@ impl CFileReader {
         CFileReader {
             line_chars: Vec::with_capacity(1000),
             position: 0,
+            last_byte: 0,
         }
     }
 
@@ -25,9 +26,6 @@ impl CFileReader {
         self.line_chars.clear();
 
         let mut byte_pos = 0usize;
-        let mut char_pos = 0u32;
-        let mut column = 0u32;
-        let mut line = 0u32;
         while byte_pos < bytes.len() {
             let char_bytes = match char::decode_utf8(bytes, byte_pos) {
                 Ok(cb) => cb,
@@ -37,49 +35,34 @@ impl CFileReader {
                 },
             };
 
-            byte_pos += char_bytes.byte_count();
-
             let add_char = match char_bytes.char() {
-                '\\' if byte_pos < bytes.len() => match bytes[byte_pos] {
-                    b'\r' if byte_pos + 1 < bytes.len() && bytes[byte_pos + 1] == b'\n' => {
-                        column = 0;
-                        line += 1;
-                        byte_pos += 2;
-                        char_pos += 3;
+                '\\' => match bytes.get(byte_pos + 1) {
+                    Some(b'\r') if bytes.get(byte_pos + 2) == Some(&b'\n') => {
+                        byte_pos += 3;
                         continue;
                     },
-                    b'\n' => {
-                        column = 0;
-                        line += 1;
-                        byte_pos += 1;
-                        char_pos += 2;
+                    Some(b'\n') => {
+                        byte_pos += 2;
                         continue;
                     },
                     _ => '\\',
-                },
-                '\n' => {
-                    self.line_chars
-                        .push(CharPos { char: '\n', line, column, pos: char_pos });
-                    column = 0;
-                    line += 1;
-                    char_pos += 1;
-                    continue;
                 },
                 // TODO: Trigraph support could be added here (remember ??/ acts like \ )
                 c => c,
             };
 
-            self.line_chars.push(CharPos {
-                char: add_char,
-                line,
-                column,
-                pos: char_pos,
-            });
-            column += 1;
-            char_pos += 1;
+            self.line_chars.push((add_char, byte_pos as u32));
+
+            byte_pos += char_bytes.byte_count();
         }
 
+        self.last_byte = byte_pos as u32;
+
         Option::None
+    }
+
+    pub fn last_byte(&self) -> u32 {
+        self.last_byte
     }
 
     pub fn is_empty(&self) -> bool {
@@ -90,8 +73,8 @@ impl CFileReader {
         if self.position >= self.line_chars.len() {
             CharResult::EOF
         } else {
-            let char_pos = &self.line_chars[self.position];
-            CharResult::Value(char_pos.char, char_pos.pos)
+            let (char, pos) = &self.line_chars[self.position];
+            CharResult::Value(*char, *pos)
         }
     }
 
@@ -100,17 +83,12 @@ impl CFileReader {
         self.front()
     }
 
-    pub fn position(&self) -> SourceLocation {
-        let char_pos = &self.line_chars[self.position.min(self.line_chars.len() - 1)];
-        SourceLocation::new(char_pos.line, char_pos.column)
-    }
-
     pub fn next_char_or_null(&self) -> char {
         let next_position = self.position + 1;
         if next_position >= self.line_chars.len() {
             '\0'
         } else {
-            self.line_chars[next_position].char
+            self.line_chars[next_position].0
         }
     }
 
@@ -136,12 +114,20 @@ impl CFileReader {
         true
     }
 
-    pub fn char_distance_from(&self, position: u32) -> u32 {
-        return if self.position >= self.line_chars.len() {
-            self.line_chars.last().unwrap().pos + 1 - position
+    pub fn position(&self) -> u32 {
+        if self.position < self.line_chars.len() {
+            self.line_chars[self.position].1
         } else {
-            self.line_chars[self.position].pos - position
-        };
+            self.last_byte
+        }
+    }
+
+    pub fn distance_from(&self, position: u32) -> u32 {
+        if self.position < self.line_chars.len() {
+            self.line_chars[self.position].1 - position
+        } else {
+            self.line_chars.last().unwrap().1 + 1 - position
+        }
     }
 }
 
@@ -163,11 +149,4 @@ impl CharResult {
             _ => '\0',
         }
     }
-}
-
-struct CharPos {
-    char: char,
-    line: u32,
-    column: u32,
-    pos: u32,
 }

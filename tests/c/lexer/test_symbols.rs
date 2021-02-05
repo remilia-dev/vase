@@ -16,7 +16,7 @@ fn test_symbol_lexing() {
     });
     let tokens = lexer.lex_bytes(0, TEST_CASE.as_bytes()).unwrap();
     for i in 0..tokens.len() {
-        assert_eq!(*tokens[i].kind(), TEST_RESULT[i]);
+        assert_eq!(*tokens[i].kind(), TEST_RESULT[i], "At index: {}", i);
     }
 }
 
@@ -228,7 +228,7 @@ static TEST_RESULT: &'static [CTokenKind] = &[
     RBracket { alt: true },
     RBracket { alt: true },
 
-    LParen { whitespace_before: false },
+    LParen,
 
     RParen,
 

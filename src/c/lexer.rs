@@ -17,12 +17,12 @@ use crate::{
     sync::Arc,
     util::{
         CachedString,
-        SourceLocation,
         StringBuilder,
     },
 };
 
 #[derive(PartialEq)]
+#[repr(u8)]
 enum CLexerMode {
     Normal,
     Preprocessor,
@@ -74,7 +74,7 @@ impl<'a> CLexer<'a> {
             if file.metadata().unwrap().len() == 0 {
                 // Can't memory map a 0-byte file.
                 let mut stack = CTokenStack::new(file_id, &Some(file_path));
-                stack.append(CToken::new(SourceLocation::new(0, 0), 0, CTokenKind::EOF));
+                stack.append(CToken::new(0, 0, CTokenKind::EOF, false));
                 return Result::Ok(stack);
             }
 
@@ -111,13 +111,14 @@ impl<'a> CLexer<'a> {
 
         let mut tokens = CTokenStack::new(file_id, &self.loaded_path);
         if self.reader.is_empty() {
-            tokens.append(CToken::new(SourceLocation::new(0, 0), 0, CTokenKind::EOF));
+            tokens.append(CToken::new(0, 0, CTokenKind::EOF, false));
             tokens.finalize();
             return tokens;
         }
 
+        let mut have_skipped_whitespace = false;
         loop {
-            let have_skipped_whitespace = self.reader.skip_most_whitespace();
+            have_skipped_whitespace |= self.reader.skip_most_whitespace();
 
             let (character, position) = match self.reader.front() {
                 CharResult::EOF => {
@@ -127,7 +128,6 @@ impl<'a> CLexer<'a> {
                 CharResult::Value(value, position) => (value, position),
             };
 
-            let loc = self.reader.position();
             let kind = match character {
                 '/' if self.reader.move_forward_if_next('/') => {
                     self.lex_comment(false);
@@ -135,32 +135,43 @@ impl<'a> CLexer<'a> {
                 },
                 '/' if self.reader.move_forward_if_next('*') => {
                     self.lex_comment(true);
+                    have_skipped_whitespace = true;
                     continue;
                 },
                 '\n' => {
                     self.end_line(&mut tokens);
                     self.at_start_of_line = true;
+                    have_skipped_whitespace = true;
                     continue;
                 },
                 '"' | '<' if matches!(self.mode, CLexerMode::Include { .. }) => {
                     self.lex_include(&mut tokens, character)
                 },
+                '\'' | '"' => self.lex_string(CStringType::Default, character),
                 c if matches!(self.mode, CLexerMode::Message) => self.lex_message(c),
-                c if r"~!@#%^&*()[]{}-+=:;\|,.<>/?".contains(c) => {
-                    self.lex_symbol(&mut tokens, c, have_skipped_whitespace)
-                },
-                '\'' | '"' => self.lex_string(CStringType::DEFAULT, character),
+                c if r"~!@#%^&*()[]{}-+=:;\|,.<>/?".contains(c) => self.lex_symbol(&mut tokens, c),
                 c if c.is_ascii_digit() => self.lex_number(false, c),
                 c => self.lex_identifier(c),
             };
 
-            let length = self.reader.char_distance_from(position);
+            let length = self.reader.distance_from(position);
 
-            tokens.append(CToken::new(loc, length, kind));
+            tokens.append(CToken::new(
+                position,
+                length,
+                kind,
+                have_skipped_whitespace,
+            ));
             self.at_start_of_line = false;
+            have_skipped_whitespace = false;
         }
 
-        tokens.append(CToken::new(self.reader.position(), 0, CTokenKind::EOF));
+        tokens.append(CToken::new(
+            self.reader.last_byte(),
+            0,
+            CTokenKind::EOF,
+            false,
+        ));
 
         tokens.finalize();
         tokens
@@ -169,24 +180,22 @@ impl<'a> CLexer<'a> {
     fn end_line(&mut self, tokens: &mut CTokenStack) {
         if self.mode != CLexerMode::Normal {
             self.mode = CLexerMode::Normal;
-            tokens.append(CToken::new(self.reader.position(), 0, CTokenKind::PreEnd));
+            tokens.append(CToken::new(
+                self.reader.position(),
+                0,
+                CTokenKind::PreEnd,
+                false,
+            ));
         }
         self.reader.move_forward();
     }
 
-    fn lex_symbol(
-        &mut self,
-        tokens: &mut CTokenStack,
-        first_char: char,
-        have_skipped_whitespace: bool,
-    ) -> CTokenKind {
+    fn lex_symbol(&mut self, tokens: &mut CTokenStack, first_char: char) -> CTokenKind {
         let kind = match first_char {
             // TODO: Add double [[ and ]] support for C2X attributes
             '[' => CTokenKind::LBracket { alt: false },
             ']' => CTokenKind::RBracket { alt: false },
-            '(' => CTokenKind::LParen {
-                whitespace_before: have_skipped_whitespace,
-            },
+            '(' => CTokenKind::LParen,
             ')' => CTokenKind::RParen,
             '{' => CTokenKind::LBrace { alt: false },
             '}' => CTokenKind::RBrace { alt: false },
