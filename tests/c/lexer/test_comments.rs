@@ -11,9 +11,7 @@ use vase::c::{
 #[test]
 fn test_comment_lexing() {
     let env = CCompileEnv::new(CCompileSettings::default());
-    let mut lexer = CLexer::new(&env, &|_, _, _| -> u32 {
-        panic!("No includes should occur!")
-    });
+    let mut lexer = CLexer::new(&env, &|_, _, _| panic!("No includes should occur!"));
     let tokens = lexer.lex_bytes(0, TEST_CASE.as_bytes()).unwrap();
     for i in 0..tokens.len() {
         assert_eq!(*tokens[i].kind(), TEST_RESULT[i], "At index: {}", i);

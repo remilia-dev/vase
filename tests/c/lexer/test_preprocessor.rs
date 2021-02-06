@@ -16,7 +16,7 @@ use vase::{
 #[test]
 fn test_preprocessor_lexing() {
     let env = CCompileEnv::new(CCompileSettings::default());
-    let mut lexer = CLexer::new(&env, &|_, _, _| -> u32 { 1 });
+    let mut lexer = CLexer::new(&env, &|_, _, _| None);
     let tokens = lexer.lex_bytes(0, TEST_CASE.as_bytes()).unwrap();
     let test_results = test_results(env.cache());
     for i in 0..tokens.len() {

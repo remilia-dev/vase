@@ -17,10 +17,7 @@ use crate::{
         RwLockUpgradableReadGuard,
         WorkQueue,
     },
-    util::{
-        CachedString,
-        Utf8DecodeError,
-    },
+    util::CachedString,
 };
 
 pub struct CMultiLexer {
@@ -45,14 +42,13 @@ impl CMultiLexer {
         );
 
         let include_callback =
-            |inc_type, filename: &CachedString, curr_file: &Option<Arc<Path>>| -> FileId {
-                return match self.find_or_add_include(inc_type, filename, curr_file.as_ref()) {
-                    Ok(file_id) => file_id,
-                    Err((path, file_id)) => {
-                        work_queue.add_task((path, file_id));
-                        file_id
-                    },
-                };
+            |inc_type, filename: &CachedString, curr_file: &Option<Arc<Path>>| -> Option<FileId> {
+                let (path, file_id) =
+                    self.find_or_add_include(inc_type, filename, curr_file.as_ref());
+                if let Some(path) = path {
+                    work_queue.add_task((path, file_id.unwrap()));
+                }
+                file_id
             };
         {
             let tl_lexer = thread_local::ThreadLocal::new();
@@ -62,8 +58,15 @@ impl CMultiLexer {
                 let mut lexer = tl_lexer
                     .get_or(|| RefCell::new(CLexer::new(&self.env, &include_callback)))
                     .borrow_mut();
-                let lexed_result = lexer.lex_file(slot, to_lex);
-                self.env.file_id_to_tokens().set(slot, lexed_result.map(Arc::new));
+                match lexer.lex_file(slot, to_lex) {
+                    Ok(tokens) => {
+                        self.env.file_id_to_tokens().set(slot, Arc::new(tokens));
+                    },
+                    Err(err) => {
+                        // TODO: Save errors elsewhere.
+                        eprintln!("Error occured when lexing a file: {:?}", err);
+                    },
+                }
             });
         }
     }
@@ -73,40 +76,21 @@ impl CMultiLexer {
         inc_type: CIncludeType,
         filename: &CachedString,
         curr_file: Option<&Arc<Path>>,
-    ) -> Result<FileId, (Arc<Path>, FileId)> {
-        return match self.env.find_include(inc_type, filename, curr_file) {
+    ) -> (Option<Arc<Path>>, Option<FileId>) {
+        match self.env.find_include(inc_type, filename, curr_file) {
             Some(inc_file) => {
                 let path_to_file_id = self.path_to_file_id.upgradable_read();
                 if let Some(file_id) = path_to_file_id.get(&inc_file) {
-                    return Ok(*file_id);
+                    return (None, Some(*file_id));
                 }
 
                 let new_file_id = self.env.file_id_to_tokens().reserve();
                 let mut path_to_file_id = RwLockUpgradableReadGuard::upgrade(path_to_file_id);
                 path_to_file_id.insert(inc_file.clone(), new_file_id);
                 // Err signals that the outer function will need to have the file lex.
-                return Err((inc_file, new_file_id));
+                (Some(inc_file), Some(new_file_id))
             },
-            None => {
-                // Even though the include is missing, we don't return Err because there is no more processing needed.
-                // Err is only returned when another file will need to be lexed.
-                let missing_error = Err(CLexerError::MissingIncludeError(filename.clone()));
-                eprintln!(
-                    "'{}': Couldn't find include '{}' of type {:?}.",
-                    curr_file.unwrap().display(),
-                    filename.string(),
-                    inc_type
-                );
-                Ok(self.env.file_id_to_tokens().push(missing_error))
-            },
-        };
+            None => (None, None),
+        }
     }
-}
-
-#[derive(Debug)]
-pub enum CLexerError {
-    Utf8DecodeError(Utf8DecodeError),
-    MissingIncludeError(CachedString),
-    IOError(std::io::Error),
-    EmptySlotError,
 }

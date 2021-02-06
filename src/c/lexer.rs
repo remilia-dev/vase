@@ -10,7 +10,7 @@ use crate::{
         file_reader::*,
         token::*,
         CCompileEnv,
-        CLexerError,
+        CError,
         CTokenStack,
         FileId,
     },
@@ -31,7 +31,7 @@ enum CLexerMode {
 }
 
 pub type CIncludeCallback<'a> =
-    &'a (dyn Send + Sync + Fn(CIncludeType, &CachedString, &Option<Arc<Path>>) -> FileId);
+    &'a (dyn Send + Sync + Fn(CIncludeType, &CachedString, &Option<Arc<Path>>) -> Option<FileId>);
 
 pub struct CLexer<'a> {
     mode: CLexerMode,
@@ -63,11 +63,11 @@ impl<'a> CLexer<'a> {
         &mut self,
         file_id: FileId,
         file_path: Arc<Path>,
-    ) -> Result<CTokenStack, CLexerError> {
+    ) -> Result<CTokenStack, CError> {
         // The scope is here to free file resources early.
         {
             let file = match File::open(&file_path) {
-                Err(err) => return Err(CLexerError::IOError(err)),
+                Err(err) => return Err(CError::IOError(Arc::new(err))),
                 Ok(f) => f,
             };
 
@@ -82,12 +82,12 @@ impl<'a> CLexer<'a> {
             // TODO: Lock the file that is being mapped. This would prevent the memory map from changing under us.
             // It would also allow this to be truly safe.
             let mmap = match unsafe { memmap2::MmapOptions::new().map(&file) } {
-                Err(err) => return Err(CLexerError::IOError(err)),
+                Err(err) => return Err(CError::IOError(Arc::new(err))),
                 Ok(m) => m,
             };
 
             if let Some(err) = self.reader.load_bytes(&mmap) {
-                return Err(CLexerError::Utf8DecodeError(err));
+                return Err(CError::Utf8DecodeError(err));
             }
         }
 
@@ -95,9 +95,9 @@ impl<'a> CLexer<'a> {
         Result::Ok(self.lex(file_id))
     }
 
-    pub fn lex_bytes(&mut self, file_id: FileId, bytes: &[u8]) -> Result<CTokenStack, CLexerError> {
+    pub fn lex_bytes(&mut self, file_id: FileId, bytes: &[u8]) -> Result<CTokenStack, CError> {
         if let Some(err) = self.reader.load_bytes(bytes) {
-            return Result::Err(CLexerError::Utf8DecodeError(err));
+            return Result::Err(CError::Utf8DecodeError(err));
         }
         self.loaded_path = None;
         Result::Ok(self.lex(file_id))

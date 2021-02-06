@@ -15,7 +15,7 @@ use crate::{
 #[derive(Debug)]
 pub struct CTokenStack {
     tokens: Vec<CToken>,
-    file_references: HashMap<CachedString, FileId>,
+    file_references: HashMap<CachedString, Option<FileId>>,
     file_path: Option<Arc<Path>>,
     file_id: FileId,
 }
@@ -36,12 +36,18 @@ impl CTokenStack {
         self.tokens.len() - 1
     }
 
-    pub fn add_reference(&mut self, include_name: &CachedString, file_id: FileId) {
+    pub fn add_reference(&mut self, include_name: &CachedString, file_id: Option<FileId>) {
         self.file_references.insert(include_name.clone(), file_id);
     }
 
     pub fn len(&self) -> usize {
         self.tokens.len()
+    }
+    pub fn file_id(&self) -> FileId {
+        self.file_id
+    }
+    pub fn get_file_ref(&self, inc_str: &CachedString) -> Option<FileId> {
+        *self.file_references.get(inc_str).unwrap()
     }
 
     pub fn finalize(&mut self) {

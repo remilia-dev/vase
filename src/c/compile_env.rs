@@ -13,7 +13,6 @@ use crate::{
         CCompileSettings,
         CIncludeType,
         CLangVersion,
-        CLexerError,
         CStringType,
         CTokenKind,
         CTokenStack,
@@ -36,7 +35,7 @@ pub struct CCompileEnv {
     cached_to_preprocessor: HashMap<CachedString, CTokenKind>,
     cached_to_str_prefix: HashMap<CachedString, CStringType>,
     // OPTIMIZATION: Maybe OnceArray should operate on Arcs rather than boxes.
-    file_id_to_tokens: OnceArray<Result<Arc<CTokenStack>, CLexerError>>,
+    file_id_to_tokens: OnceArray<Arc<CTokenStack>>,
 }
 impl CCompileEnv {
     pub fn new(settings: CCompileSettings) -> CCompileEnv {
@@ -72,7 +71,7 @@ impl CCompileEnv {
     pub fn cached_to_str_prefix(&self) -> &HashMap<CachedString, CStringType> {
         &self.cached_to_str_prefix
     }
-    pub fn file_id_to_tokens(&self) -> &OnceArray<Result<Arc<CTokenStack>, CLexerError>> {
+    pub fn file_id_to_tokens(&self) -> &OnceArray<Arc<CTokenStack>> {
         &self.file_id_to_tokens
     }
 
