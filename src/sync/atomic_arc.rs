@@ -69,7 +69,7 @@ impl<T> AtomicArc<T> {
     pub fn set(&mut self, val: Arc<T>) {
         // SAFETY: We hold a reference count and are getting rid of it.
         if let Some(ptr) = NonNull::new(*self.ptr.get_mut()) {
-            unsafe { Arc::decr_strong_count(ptr.as_ptr()) }
+            unsafe { Arc::decrement_strong_count(ptr.as_ptr()) }
         }
         // We consume the Arc and take its place
         *self.ptr.get_mut() = Arc::into_raw(val) as *mut T;
@@ -143,7 +143,7 @@ impl<T> AtomicArc<T> {
     /// 2. The ptr must *also* still be stored in self.ptr.
     unsafe fn increment_and_make_arc(ptr: NonNull<T>) -> Arc<T> {
         // SAFETY: The value must be from Arc::into_raw
-        Arc::incr_strong_count(ptr.as_ptr());
+        Arc::increment_strong_count(ptr.as_ptr());
         // SAFETY: We've incremented the count so self and this new arc can co-exist.
         Arc::from_raw(ptr.as_ptr())
     }
@@ -152,7 +152,7 @@ impl<T> Drop for AtomicArc<T> {
     fn drop(&mut self) {
         if let Some(ptr) = NonNull::new(*self.ptr.get_mut()) {
             // SAFETY: This struct owns a reference count.
-            unsafe { Arc::decr_strong_count(ptr.as_ptr()) }
+            unsafe { Arc::decrement_strong_count(ptr.as_ptr()) }
         }
     }
 }
