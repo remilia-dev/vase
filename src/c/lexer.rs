@@ -497,29 +497,17 @@ impl<'a> CLexer<'a> {
             self.str_builder.append_ascii(b'.');
         }
 
-        let mut num_type = CNumberType::Dec;
-        if !dot_start && first_char == '0' {
-            num_type = if self.reader.move_forward_if_next('x') {
-                CNumberType::Hex
-            } else if self.reader.move_forward_if_next('b') {
-                CNumberType::Bin
-            } else {
-                CNumberType::Oct
-            }
-        } else {
-            // NOTE: All characters in a number are ascii
-            self.str_builder.append_ascii(first_char as u8);
-        }
+        // NOTE: All characters in a number are ascii
+        self.str_builder.append_ascii(first_char as u8);
 
         while let CharResult::Value(char, ..) = self.reader.move_forward() {
             match char {
-                c if num_type.supports_exp(c) => {
-                    // NOTE: All supported exponents start with an ascii character.
-                    self.str_builder.append_ascii(c as u8);
+                'e' | 'E' | 'p' | 'P' => {
+                    self.str_builder.append_ascii(char as u8);
                     if self.reader.move_forward_if_next('-') {
                         self.str_builder.append_ascii(b'-');
                     } else if self.reader.move_forward_if_next('+') {
-                        // We don't need the + to properly parse it, so we discard it.
+                        self.str_builder.append_ascii(b'+');
                     }
                 },
                 '.' | '_' => self.str_builder.append_ascii(char as u8),
@@ -529,7 +517,7 @@ impl<'a> CLexer<'a> {
         }
 
         let num_data = self.env.cache().get_or_cache(self.str_builder.current());
-        CTokenKind::Number { num_type, num_data }
+        CTokenKind::Number(num_data)
     }
 
     fn lex_identifier(&mut self, first_char: char) -> CTokenKind {

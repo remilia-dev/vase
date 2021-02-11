@@ -5,7 +5,7 @@ use crate::{
     util::CachedString,
 };
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct CToken {
     byte: u32,
     byte_length: u32,
@@ -48,10 +48,7 @@ pub enum CTokenKind {
     },
     Message(Arc<Box<str>>),
     Identifier(CachedString),
-    Number {
-        num_type: CNumberType,
-        num_data: CachedString,
-    },
+    Number(CachedString),
     String {
         str_type: CStringType,
         has_complex_escapes: bool,
@@ -131,10 +128,10 @@ pub enum CTokenKind {
     Alignof,
     Atomic,
     Bool,
+    Complex,
     Decimal32,
     Decimal64,
     Decimal128,
-    Complex,
     Generic,
     Imaginary,
     Noreturn,
@@ -273,30 +270,26 @@ pub enum CTokenKind {
 }
 impl CTokenKind {
     pub fn is_linking(&self) -> bool {
-        return matches!(
+        use CTokenKind::*;
+        matches!(
             self,
-            CTokenKind::PreIf { .. }
-                | CTokenKind::PreIfDef { .. }
-                | CTokenKind::PreIfNDef { .. }
-                | CTokenKind::PreElif { .. }
-                | CTokenKind::PreElse { .. }
-        );
+            PreIf { .. } | PreIfDef { .. } | PreIfNDef { .. } | PreElif { .. } | PreElse { .. }
+        )
     }
 
     pub fn ends_a_link(&self) -> bool {
-        return matches!(
-            self,
-            CTokenKind::PreElse { .. } | CTokenKind::PreElif { .. } | CTokenKind::PreEndIf { .. }
-        );
+        use CTokenKind::*;
+        matches!(self, PreElse { .. } | PreElif { .. } | PreEndIf { .. })
     }
 
     pub fn set_link(&mut self, val: usize) {
+        use CTokenKind::*;
         match self {
-            CTokenKind::PreIf { link }
-            | CTokenKind::PreIfDef { link }
-            | CTokenKind::PreIfNDef { link }
-            | CTokenKind::PreElif { link }
-            | CTokenKind::PreElse { link } => *link = val,
+            PreIf { link }
+            | PreIfDef { link }
+            | PreIfNDef { link }
+            | PreElif { link }
+            | PreElse { link } => *link = val,
             _ => {},
         }
     }
@@ -327,37 +320,6 @@ impl CIncludeType {
 
     pub fn ignore_own_file(&self) -> bool {
         return matches!(self, CIncludeType::IncludeNext);
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
-#[repr(u8)]
-pub enum CNumberType {
-    // NOTE: Types need to be in increasing number of digits.
-    Bin,
-    Oct,
-    Dec,
-    Hex,
-}
-impl CNumberType {
-    pub fn supports_digit(self, c: char) -> bool {
-        match c {
-            '0' | '1' => true,
-            '2' | '3' | '4' | '5' | '6' | '7' => self != CNumberType::Bin,
-            '8' | '9' => self >= CNumberType::Dec,
-            'a' | 'A' | 'b' | 'B' | 'c' | 'C' | 'd' | 'D' | 'e' | 'E' | 'f' | 'F' => {
-                self == CNumberType::Hex
-            },
-            _ => false,
-        }
-    }
-
-    pub fn supports_exp(self, c: char) -> bool {
-        match c {
-            'e' | 'E' => self != CNumberType::Hex,
-            'p' | 'P' => self == CNumberType::Hex,
-            _ => false,
-        }
     }
 }
 
