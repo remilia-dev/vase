@@ -67,14 +67,14 @@ impl<'a> CLexer<'a> {
         // The scope is here to free file resources early.
         {
             let file = match File::open(&file_path) {
-                Err(err) => return Err(CError::IOError(Arc::new(err))),
+                Err(err) => return Err(CError::IoError(Arc::new(err))),
                 Ok(f) => f,
             };
 
             if file.metadata().unwrap().len() == 0 {
                 // Can't memory map a 0-byte file.
                 let mut stack = CTokenStack::new(file_id, &Some(file_path));
-                stack.append(CToken::new(0, 0, CTokenKind::EOF, false));
+                stack.append(CToken::new(0, 0, CTokenKind::Eof, false));
                 return Result::Ok(stack);
             }
 
@@ -82,7 +82,7 @@ impl<'a> CLexer<'a> {
             // TODO: Lock the file that is being mapped. This would prevent the memory map from changing under us.
             // It would also allow this to be truly safe.
             let mmap = match unsafe { memmap2::MmapOptions::new().map(&file) } {
-                Err(err) => return Err(CError::IOError(Arc::new(err))),
+                Err(err) => return Err(CError::IoError(Arc::new(err))),
                 Ok(m) => m,
             };
 
@@ -111,7 +111,7 @@ impl<'a> CLexer<'a> {
 
         let mut tokens = CTokenStack::new(file_id, &self.loaded_path);
         if self.reader.is_empty() {
-            tokens.append(CToken::new(0, 0, CTokenKind::EOF, false));
+            tokens.append(CToken::new(0, 0, CTokenKind::Eof, false));
             tokens.finalize();
             return tokens;
         }
@@ -121,7 +121,7 @@ impl<'a> CLexer<'a> {
             have_skipped_whitespace |= self.reader.skip_most_whitespace();
 
             let (character, position) = match self.reader.front() {
-                CharResult::EOF => {
+                CharResult::Eof => {
                     self.end_line(&mut tokens);
                     break;
                 },
@@ -169,7 +169,7 @@ impl<'a> CLexer<'a> {
         tokens.append(CToken::new(
             self.reader.last_byte(),
             0,
-            CTokenKind::EOF,
+            CTokenKind::Eof,
             false,
         ));
 
@@ -568,7 +568,7 @@ impl<'a> CLexer<'a> {
         loop {
             let char = match self.reader.move_forward() {
                 CharResult::Value(cv, ..) => cv,
-                CharResult::EOF => {
+                CharResult::Eof => {
                     if multi_line {
                         // TODO: Communicate the warning
                         println!("TODO: End-of-file hit before the end of multi-line comment.");

@@ -42,4 +42,4 @@ be a token*/ +
 "#;
 
 // The 5 pluses separate comments. The star and slash test that multi-line comments do not nest.
-static TEST_RESULT: &'static [CTokenKind] = &[Plus, Plus, Plus, Plus, Plus, Star, Slash, EOF];
+static TEST_RESULT: &'static [CTokenKind] = &[Plus, Plus, Plus, Plus, Plus, Star, Slash, Eof];

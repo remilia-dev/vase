@@ -55,7 +55,7 @@ pub enum CTokenKind {
         is_char: bool,
         str_data: Arc<Box<str>>,
     },
-    EOF,
+    Eof,
 
     // == Begin Preprocessors
     PreIf {

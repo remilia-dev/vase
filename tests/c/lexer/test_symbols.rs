@@ -364,6 +364,5 @@ static TEST_RESULT: &'static [CTokenKind] = &[
     StarEqual,
 
     Tilde,
-
-    EOF,
+    Eof,
 ];

@@ -9,5 +9,5 @@ use crate::{
 pub enum CError {
     // Lexer errors
     Utf8DecodeError(Utf8DecodeError),
-    IOError(Arc<std::io::Error>),
+    IoError(Arc<std::io::Error>),
 }

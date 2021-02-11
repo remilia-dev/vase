@@ -106,6 +106,6 @@ fn test_results(cache: &StringCache) -> Box<[CTokenKind]> {
         PreWarning, Message(Arc::new(Box::from("can span lines"))),
 
         PreUnknown(cache.get_or_cache("not_in_the_standard")), PreEnd,
-        EOF,
+        Eof,
     ])
 }

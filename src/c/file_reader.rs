@@ -71,7 +71,7 @@ impl CFileReader {
 
     pub fn front(&self) -> CharResult {
         if self.position >= self.line_chars.len() {
-            CharResult::EOF
+            CharResult::Eof
         } else {
             let (char, pos) = &self.line_chars[self.position];
             CharResult::Value(*char, *pos)
@@ -139,7 +139,7 @@ impl Default for CFileReader {
 
 pub enum CharResult {
     Value(char, u32),
-    EOF,
+    Eof,
 }
 
 impl CharResult {
