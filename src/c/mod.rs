@@ -8,6 +8,7 @@ pub use multi_lexer::*;
 pub use settings::*;
 pub use token::*;
 pub use token_stack::CTokenStack;
+pub use traveler::*;
 
 pub type FileId = u32;
 
@@ -19,3 +20,4 @@ mod multi_lexer;
 mod settings;
 mod token;
 mod token_stack;
+mod traveler;

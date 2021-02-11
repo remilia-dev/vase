@@ -11,4 +11,22 @@ fn main() {
     let env = Arc::new(CCompileEnv::new(settings));
     let mut lexer = CMultiLexer::new(env.clone());
     lexer.lex_multi_threaded(&*env.settings().source_files);
+
+    let mut traveler = CTraveler::new(env.clone());
+    let tokens = env.file_id_to_tokens()[0].clone();
+    println!("{:#?}", tokens);
+    traveler.load_start(tokens);
+
+    let mut tokens = Vec::new();
+    loop {
+        match traveler.head().kind() {
+            CTokenKind::Eof => break,
+            token => {
+                tokens.push(token.clone());
+                traveler.move_forward();
+            },
+        }
+    }
+
+    println!("{:#?}", tokens);
 }

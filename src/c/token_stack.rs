@@ -47,7 +47,7 @@ impl CTokenStack {
         self.file_id
     }
     pub fn get_file_ref(&self, inc_str: &CachedString) -> Option<FileId> {
-        *self.file_references.get(inc_str).unwrap()
+        *self.file_references.get(inc_str)?
     }
 
     pub fn finalize(&mut self) {

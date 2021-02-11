@@ -22,7 +22,7 @@ overflow_delimited_expr = true
 # Modules should be in alphabetical order.
 reorder_modules = true
 # Small-ish struct literals should generally be on one line.
-struct_lit_width = 40
+struct_lit_width = 35
 # field: field is just redundant.
 use_field_init_shorthand = true
 # There are few multi-condition wheres, so a single line is fine.
