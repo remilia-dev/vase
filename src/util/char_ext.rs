@@ -87,7 +87,7 @@ impl CharExt for char {
 
         let char_val = match std::char::from_u32(raw_char) {
             Some(char) => char,
-            _ => {
+            None => {
                 return Result::Err(Utf8DecodeError::InvalidCharacter {
                     byte_position: offset,
                     bad_codepoint: raw_char,
@@ -157,7 +157,7 @@ pub enum Utf8DecodeError {
 }
 impl std::fmt::Display for Utf8DecodeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
+        match *self {
             Self::InvalidByte { byte_position, bad_byte } => write!(
                 f,
                 "The byte at 0x{:X?} is an invalid value (0x{:X?}).",

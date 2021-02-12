@@ -56,21 +56,17 @@ impl CTraveler {
                 continue;
             }
 
-            match self.frames.head().kind() {
+            match *self.frames.head().kind() {
                 PreIf { link } => {
-                    let link = *link;
                     self.handle_if(link);
                 },
                 PreIfDef { link } => {
-                    let link = *link;
                     self.handle_if_def(true, link);
                 },
                 PreIfNDef { link } => {
-                    let link = *link;
                     self.handle_if_def(false, link);
                 },
                 PreElif { link } => {
-                    let link = *link;
                     if self.frames.should_chain_skip() {
                         self.frames.skip_to(link, true);
                     } else {
@@ -78,7 +74,6 @@ impl CTraveler {
                     }
                 },
                 PreElse { link } => {
-                    let link = *link;
                     if self.frames.should_chain_skip() {
                         self.frames.skip_to(link, true);
                     } else {
@@ -101,14 +96,14 @@ impl CTraveler {
                 PreIncludeNext => self.handle_include(true),
                 PreError => self.handle_message(true),
                 PreWarning => self.handle_message(false),
-                PreUnknown(_str) => {
+                PreUnknown(ref _str) => {
                     unimplemented!("TODO: Error")
                 },
                 PrePragma => unimplemented!("#pragma isn't implemented yet."),
                 Pragma => {
                     unimplemented!("_Pragma isn't implemented yet.")
                 },
-                Identifier(id) => match self.frames.should_handle_macro(id.uniq_id()) {
+                Identifier(ref id) => match self.frames.should_handle_macro(id.uniq_id()) {
                     Some(handle) => self.frames.handle_macro(handle),
                     None => break,
                 },
@@ -131,6 +126,7 @@ impl CTraveler {
         self.frames.move_forward();
         let second_token = self.move_forward().clone();
 
+        #[allow(clippy::pattern_type_mismatch)]
         let joined = match (first_token.kind(), second_token.kind()) {
             (LAngle, Colon) => LBracket { alt: true },
             (Colon, RAngle) => RBracket { alt: true },
@@ -160,7 +156,7 @@ impl CTraveler {
             (Slash, Equal) => SlashEqual,
             (Star, Equal) => StarEqual,
             (
-                Identifier(id),
+                Identifier(ref id),
                 String {
                     str_type: CStringType::Default,
                     is_char,
@@ -218,8 +214,8 @@ impl CTraveler {
     }
 
     fn handle_if_def(&mut self, if_def: bool, link: usize) {
-        let defined = match self.frames.move_forward().kind() {
-            Identifier(id) => {
+        let defined = match *self.frames.move_forward().kind() {
+            Identifier(ref id) => {
                 let macro_id = id.uniq_id();
                 self.frames.has_macro(macro_id)
             },
@@ -246,8 +242,8 @@ impl CTraveler {
     }
 
     fn handle_define(&mut self) {
-        let macro_id = match self.frames.move_forward().kind() {
-            Identifier(id) => id.uniq_id(),
+        let macro_id = match *self.frames.move_forward().kind() {
+            Identifier(ref id) => id.uniq_id(),
             PreEnd => {
                 // TODO: Report missing identifier.
                 eprintln!("Missing identifier to define");
@@ -263,7 +259,7 @@ impl CTraveler {
         };
 
         let head = self.frames.move_forward();
-        match head.kind() {
+        match *head.kind() {
             PreEnd => {
                 // TODO: Ensure the previous macro was empty (otherwise report warning)
                 self.frames.add_macro(macro_id, MacroKind::Empty);
@@ -282,8 +278,8 @@ impl CTraveler {
         let mut params = Vec::new();
         let mut var_arg = None;
         loop {
-            match self.frames.move_forward().kind() {
-                Identifier(id) => params.push(id.uniq_id()),
+            match *self.frames.move_forward().kind() {
+                Identifier(ref id) => params.push(id.uniq_id()),
                 DotDotDot => {
                     var_arg = Some(self.env.cache().get_or_cache("__VA_ARGS__").uniq_id());
                     break;
@@ -296,7 +292,7 @@ impl CTraveler {
                 },
             }
 
-            match self.frames.move_forward().kind() {
+            match *self.frames.move_forward().kind() {
                 Comma => continue,
                 DotDotDot => {
                     var_arg = Some(params.pop().unwrap());
@@ -316,7 +312,7 @@ impl CTraveler {
             }
         }
 
-        match self.frames.head().kind() {
+        match *self.frames.head().kind() {
             RParen => {
                 self.frames.move_forward();
             },
@@ -346,7 +342,7 @@ impl CTraveler {
     fn handle_object_macro(&mut self, macro_id: usize) {
         if matches!(
             self.frames.preview_next_kind(false),
-            Some(CTokenKind::PreEnd)
+            Some(&CTokenKind::PreEnd)
         ) {
             // TODO: Ensure the previous macro is the same (otherwise report warning)
             let token = self.frames.head().clone();
@@ -368,8 +364,8 @@ impl CTraveler {
     }
 
     fn handle_undef(&mut self) {
-        match self.frames.move_forward().kind() {
-            Identifier(id) => {
+        match *self.frames.move_forward().kind() {
+            Identifier(ref id) => {
                 let macro_id = id.uniq_id();
                 self.frames.remove_macro(macro_id);
             },
@@ -392,13 +388,13 @@ impl CTraveler {
 
     fn handle_include(&mut self, _include_next: bool) {
         // We use self.move_forward to allow for macros to be decoded.
-        let inc_file = match self.move_forward().kind() {
-            IncludePath { path, .. } => {
+        let inc_file = match *self.move_forward().kind() {
+            IncludePath { ref path, .. } => {
                 let path = path.clone();
                 self.ensure_end_of_preprocessor(false);
                 self.frames.get_include_ref(path)
             },
-            String { str_data, .. } => {
+            String { ref str_data, .. } => {
                 // TODO:
                 eprintln!(
                     "Indirection with quotes is not yet supported. Included: {}",
@@ -433,8 +429,8 @@ impl CTraveler {
     }
 
     fn handle_message(&mut self, is_error: bool) {
-        match self.frames.move_forward().kind() {
-            Message(text) => {
+        match *self.frames.move_forward().kind() {
+            Message(ref text) => {
                 eprintln!(
                     "{}: {}",
                     if is_error { "ERROR " } else { "WARNING" },
@@ -454,24 +450,21 @@ impl CTraveler {
     }
 
     fn ensure_end_of_preprocessor(&mut self, move_past_end: bool) {
-        match self.frames.move_forward().kind() {
-            PreEnd => {
-                if move_past_end {
-                    self.frames.move_forward();
-                }
-            },
-            _ => {
-                // TODO: Report extra token
-                eprintln!("Extra tokens");
-                self.skip_past_preprocessor();
-            },
+        if let PreEnd = *self.frames.move_forward().kind() {
+            if move_past_end {
+                self.frames.move_forward();
+            }
+        } else {
+            // TODO: Report extra token
+            eprintln!("Extra tokens");
+            self.skip_past_preprocessor();
         }
     }
 
     fn skip_past_preprocessor(&mut self) -> usize {
         // We start with 1 because we'll always move at least 1 token forward.
         let mut count = 1usize;
-        while !matches!(self.frames.move_forward().kind(), PreEnd) {
+        while !matches!(self.frames.move_forward().kind(), &PreEnd) {
             count += 1;
         }
         // Move past the PreEnd token.

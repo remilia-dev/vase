@@ -190,6 +190,8 @@ impl<'a> CLexer<'a> {
         self.reader.move_forward();
     }
 
+    // This function is long just due to the various combinations. Splitting it up would be less clear.
+    #[allow(clippy::too_many_lines)]
     fn lex_symbol(&mut self, tokens: &mut CTokenStack, first_char: char) -> CTokenKind {
         let kind = match first_char {
             // TODO: Add double [[ and ]] support for C2X attributes

@@ -109,14 +109,14 @@ impl FrameStack {
     }
     /// Returns a reference to the current token the frame stack is at.
     pub fn head(&self) -> &CToken {
-        match &self.frames[0] {
+        match self.frames[0] {
             Frame::File { file_id, index, .. }
             | Frame::ObjectMacro { file_id, index, .. }
-            | Frame::FuncMacro { file_id, index, .. } => &self.get_file(*file_id)[*index],
-            Frame::SingleToken { token, .. } => token,
+            | Frame::FuncMacro { file_id, index, .. } => &self.file_refs[&file_id][index],
+            Frame::SingleToken { ref token, .. } => token,
             Frame::FuncArg { index, param_id, .. } => {
-                if let Frame::FuncMacro { params, .. } = &self.frames[1] {
-                    &params.get(&param_id).unwrap()[*index]
+                if let Frame::FuncMacro { ref params, .. } = self.frames[1] {
+                    &params.get(&param_id).unwrap()[index]
                 } else {
                     panic!("There should be a FuncMacro frame before a FuncArg frame.")
                 }
@@ -129,11 +129,11 @@ impl FrameStack {
     /// `exit_macros` is false.
     pub fn preview_next_kind(&self, exit_macros: bool) -> Option<&CTokenKind> {
         for i in 0..self.frames.len() {
-            match &self.frames[i] {
+            match self.frames[i] {
                 Frame::File { file_id, index, .. } => {
-                    let file = self.get_file(*file_id);
+                    let file = &self.file_refs[&file_id];
                     if index + 1 < file.len() {
-                        return Some(file[*index + 1].kind());
+                        return Some(file[index + 1].kind());
                     }
                 },
                 Frame::SingleToken { .. } => {
@@ -145,20 +145,19 @@ impl FrameStack {
                 // This would require a loop since empty parameters should be skipped.
                 Frame::ObjectMacro { file_id, index, end, .. }
                 | Frame::FuncMacro { file_id, index, end, .. } => {
-                    let file = self.get_file(*file_id);
-                    if index + 1 < *end {
-                        return Some(file[*index + 1].kind());
+                    if index + 1 < end {
+                        return Some(self.file_refs[&file_id][index + 1].kind());
                     } else if !exit_macros {
                         return None;
                     }
                 },
                 Frame::FuncArg { param_id, index, end } => {
-                    if index + 1 > *end {
+                    if index + 1 > end {
                         continue;
                     }
 
                     let parent_frame = &self.frames[i - 1];
-                    return Some(parent_frame.get_param_token(*param_id, index + 1).kind());
+                    return Some(parent_frame.get_param_token(param_id, index + 1).kind());
                 },
             }
         }
@@ -182,9 +181,8 @@ impl FrameStack {
     /// Panics if the include reference could not be found.
     pub fn get_include_ref(&mut self, inc_str: CachedString) -> FileId {
         for frame in self.frames.iter().rev() {
-            if let Frame::File { file_id, .. } = frame {
-                let file = self.get_file(*file_id);
-                if let Some(file_id) = file.get_file_ref(&inc_str) {
+            if let Frame::File { file_id, .. } = *frame {
+                if let Some(file_id) = self.file_refs[&file_id].get_file_ref(&inc_str) {
                     return file_id;
                 }
             }
@@ -206,13 +204,16 @@ impl FrameStack {
     }
     /// Returns true if a token joiner is the 'next' token.
     pub fn is_token_joiner_next(&self) -> bool {
-        let frame = match &self.frames[0] {
+        let frame = match self.frames[0] {
             Frame::SingleToken { .. } => &self.frames[self.frames.len() - 2],
-            frame => frame,
+            ref frame => frame,
         };
-        match frame {
+        match *frame {
             Frame::ObjectMacro { file_id, index, .. } | Frame::FuncMacro { file_id, index, .. } => {
-                matches!(self.get_file(*file_id)[index + 1].kind(), HashHash { .. })
+                matches!(
+                    *self.file_refs[&file_id][index + 1].kind(),
+                    HashHash { .. }
+                )
             },
             _ => false,
         }
@@ -223,7 +224,7 @@ impl FrameStack {
     pub fn push_include(&mut self, file_id: FileId) -> Result<(), ()> {
         let (file_id, length) = match self.file_refs.get(&file_id) {
             Some(file) => (file_id, file.len()),
-            None => match &self.env.file_id_to_tokens().get(file_id) {
+            None => match self.env.file_id_to_tokens().get(file_id) {
                 Some(tokens) => {
                     let tokens = (*tokens).clone();
                     let length = tokens.len();
@@ -256,16 +257,10 @@ impl FrameStack {
     /// any macros.
     pub fn skip_to(&mut self, link: usize, should_chain_skip: bool) {
         self.should_chain_skip = should_chain_skip;
-        match &mut self.frames[0] {
-            Frame::File { index, .. } => *index = link as usize,
+        match self.frames[0] {
+            Frame::File { ref mut index, .. } => *index = link as usize,
             _ => panic!("Can only skip to link when the last frame is an file frame."),
         }
-    }
-    /// Gets a token stack by its file id. This grabs the stack from the local cache of stacks.
-    /// # Panics
-    /// Panics if the given file id is not in the cache of token stacks.
-    fn get_file(&self, file_id: FileId) -> &CTokenStack {
-        self.file_refs.get(&file_id).unwrap()
     }
 }
 
@@ -291,7 +286,7 @@ impl FrameStack {
     ///
     /// Should some value be returned, the value contains the strategy [FrameStack::handle_macro] should use.
     pub fn should_handle_macro(&self, macro_id: usize) -> Option<MacroHandle> {
-        if let Frame::FuncMacro { params, .. } = &self.frames[0] {
+        if let Frame::FuncMacro { ref params, .. } = self.frames[0] {
             if let Some(param_tokens) = params.get(&macro_id) {
                 if param_tokens.is_empty() {
                     return Some(MacroHandle::Empty);
@@ -311,25 +306,20 @@ impl FrameStack {
             return None;
         }
 
-        match mcr {
+        match *mcr {
             MacroKind::Empty => Some(MacroHandle::Empty),
-            MacroKind::SingleToken { token } => {
+            MacroKind::SingleToken { ref token } => {
                 let frame = Frame::SingleToken { token: token.clone(), macro_id };
                 Some(MacroHandle::Simple(frame))
             },
             MacroKind::ObjectMacro { index, file_id, end } => {
-                let frame = Frame::ObjectMacro {
-                    file_id: *file_id,
-                    index: *index,
-                    end: *end,
-                    macro_id,
-                };
+                let frame = Frame::ObjectMacro { file_id, index, end, macro_id };
                 Some(MacroHandle::Simple(frame))
             },
-            MacroKind::FuncMacro { param_ids, .. } => {
+            MacroKind::FuncMacro { ref param_ids, .. } => {
                 let param_count = param_ids.len();
                 match self.preview_next_kind(true) {
-                    Some(CTokenKind::LParen) => {
+                    Some(&CTokenKind::LParen) => {
                         Some(MacroHandle::FuncMacro { macro_id, param_count })
                     },
                     _ => None,
@@ -362,7 +352,7 @@ impl FrameStack {
         let mut paren_layers = 0usize;
         loop {
             let head = self.move_forward();
-            match head.kind() {
+            match *head.kind() {
                 LParen => paren_layers += 1,
                 RParen => {
                     if paren_layers == 0 {
@@ -386,12 +376,12 @@ impl FrameStack {
             }
         }
 
-        let frame = match self.macros.get(&macro_id).unwrap() {
+        let frame = match self.macros[&macro_id] {
             MacroKind::FuncMacro {
                 file_id,
                 index,
                 end,
-                param_ids,
+                ref param_ids,
                 var_arg,
             } => {
                 let id_count = param_ids.len();
@@ -414,10 +404,10 @@ impl FrameStack {
 
                 match (var_arg, var_arg_tokens) {
                     (Some(id), Some(tokens)) => {
-                        param_map.insert(*id, tokens);
+                        param_map.insert(id, tokens);
                     },
                     (Some(id), None) => {
-                        param_map.insert(*id, Vec::new());
+                        param_map.insert(id, Vec::new());
                     },
                     (None, Some(_)) => {
                         // TODO: Warn about excess parameters.
@@ -426,9 +416,9 @@ impl FrameStack {
                 }
 
                 Frame::FuncMacro {
-                    file_id: *file_id,
-                    index: *index,
-                    end: *end,
+                    file_id,
+                    index,
+                    end,
                     macro_id,
                     params: param_map,
                 }
@@ -441,10 +431,10 @@ impl FrameStack {
     /// Returns whether the given macro_id is in the frame stack.
     fn in_macro(&self, macro_id: usize) -> bool {
         for frame in &self.frames {
-            let frame_macro_id = match frame {
+            let frame_macro_id = match *frame {
                 Frame::SingleToken { macro_id, .. }
                 | Frame::FuncMacro { macro_id, .. }
-                | Frame::ObjectMacro { macro_id, .. } => *macro_id,
+                | Frame::ObjectMacro { macro_id, .. } => macro_id,
                 _ => continue,
             };
 

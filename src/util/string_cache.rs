@@ -277,19 +277,6 @@ impl<const NODE_COUNT: usize> TrieNodeLimited<NODE_COUNT> {
         None
     }
 
-    fn load_or_create_value(&self, data: &CacheRequest) -> CachedString {
-        match self.node_value.load_arc(Ordering::SeqCst) {
-            Some(x) => x,
-            None => {
-                let new_value = data.new_cached();
-                // OPTIMIZATION: Make a version of set_if_none that returns the Arc.
-                self.node_value
-                    .set_if_none(new_value, Ordering::SeqCst, Ordering::SeqCst);
-                self.node_value.load_arc(Ordering::SeqCst).expect("Missing value.")
-            },
-        }
-    }
-
     fn find_or_reserve_node_index(&self, start_val: usize) -> Option<usize> {
         // We start relative to start_val to hopefully make finding/reserving a slot quicker.
         let mut loop_index = start_val % NODE_COUNT;
@@ -333,7 +320,8 @@ impl<const NODE_COUNT: usize> TrieNodeLimited<NODE_COUNT> {
 impl<const NODE_COUNT: usize> TrieNode for TrieNodeLimited<NODE_COUNT> {
     fn get_or_cache_string(&self, data: &mut CacheRequest) -> Result<CachedString, &dyn TrieNode> {
         if data.len() == data.depth {
-            Result::Ok(self.load_or_create_value(data))
+            let value = self.node_value.load_or_set_arc(&|| data.new_cached());
+            Result::Ok(value)
         } else if let Some(value) = self.move_or_get_end_value(data) {
             Result::Ok(value)
         } else {
@@ -365,34 +353,37 @@ impl TrieNodePtr {
 
     fn new_empty(depth: usize) -> TrieNodePtr {
         let new_ptr = match depth {
-            0..=1 => alloc(TrieNodeLimited::<128>::new_empty()).as_ptr() as *mut u8,
-            2..=4 => alloc(TrieNodeLimited::<64>::new_empty()).as_ptr() as *mut u8,
-            5..=8 => alloc(TrieNodeLimited::<32>::new_empty()).as_ptr() as *mut u8,
-            9..=13 => alloc(TrieNodeLimited::<24>::new_empty()).as_ptr() as *mut u8,
-            _ => alloc(TrieNodeLimited::<16>::new_empty()).as_ptr() as *mut u8,
-        };
+            0..=1 => alloc(TrieNodeLimited::<128>::new_empty()).cast::<u8>(),
+            2..=4 => alloc(TrieNodeLimited::<64>::new_empty()).cast::<u8>(),
+            5..=8 => alloc(TrieNodeLimited::<32>::new_empty()).cast::<u8>(),
+            9..=13 => alloc(TrieNodeLimited::<24>::new_empty()).cast::<u8>(),
+            _ => alloc(TrieNodeLimited::<16>::new_empty()).cast::<u8>(),
+        }
+        .as_ptr();
         TrieNodePtr { ptr: AtomicPtr::new(new_ptr) }
     }
 
     fn new_end(end_value: CachedString, depth: usize) -> TrieNodePtr {
         let new_ptr = match depth {
-            0..=1 => alloc(TrieNodeLimited::<128>::new_end(end_value, depth)).as_ptr() as *mut u8,
-            2..=4 => alloc(TrieNodeLimited::<64>::new_end(end_value, depth)).as_ptr() as *mut u8,
-            5..=8 => alloc(TrieNodeLimited::<32>::new_end(end_value, depth)).as_ptr() as *mut u8,
-            9..=13 => alloc(TrieNodeLimited::<24>::new_end(end_value, depth)).as_ptr() as *mut u8,
-            _ => alloc(TrieNodeLimited::<16>::new_end(end_value, depth)).as_ptr() as *mut u8,
-        };
+            0..=1 => alloc(TrieNodeLimited::<128>::new_end(end_value, depth)).cast::<u8>(),
+            2..=4 => alloc(TrieNodeLimited::<64>::new_end(end_value, depth)).cast::<u8>(),
+            5..=8 => alloc(TrieNodeLimited::<32>::new_end(end_value, depth)).cast::<u8>(),
+            9..=13 => alloc(TrieNodeLimited::<24>::new_end(end_value, depth)).cast::<u8>(),
+            _ => alloc(TrieNodeLimited::<16>::new_end(end_value, depth)).cast::<u8>(),
+        }
+        .as_ptr();
         TrieNodePtr { ptr: AtomicPtr::new(new_ptr) }
     }
 
     fn new_mid(node_val: usize, node: TrieNodePtr, depth: usize) -> TrieNodePtr {
         let new_ptr = match depth {
-            0..=1 => alloc(TrieNodeLimited::<128>::new_mid(node_val, node)).as_ptr() as *mut u8,
-            2..=4 => alloc(TrieNodeLimited::<64>::new_mid(node_val, node)).as_ptr() as *mut u8,
-            5..=8 => alloc(TrieNodeLimited::<32>::new_mid(node_val, node)).as_ptr() as *mut u8,
-            9..=13 => alloc(TrieNodeLimited::<24>::new_mid(node_val, node)).as_ptr() as *mut u8,
-            _ => alloc(TrieNodeLimited::<16>::new_mid(node_val, node)).as_ptr() as *mut u8,
-        };
+            0..=1 => alloc(TrieNodeLimited::<128>::new_mid(node_val, node)).cast::<u8>(),
+            2..=4 => alloc(TrieNodeLimited::<64>::new_mid(node_val, node)).cast::<u8>(),
+            5..=8 => alloc(TrieNodeLimited::<32>::new_mid(node_val, node)).cast::<u8>(),
+            9..=13 => alloc(TrieNodeLimited::<24>::new_mid(node_val, node)).cast::<u8>(),
+            _ => alloc(TrieNodeLimited::<16>::new_mid(node_val, node)).cast::<u8>(),
+        }
+        .as_ptr();
         TrieNodePtr { ptr: AtomicPtr::new(new_ptr) }
     }
 

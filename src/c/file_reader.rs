@@ -73,8 +73,8 @@ impl CFileReader {
         if self.position >= self.line_chars.len() {
             CharResult::Eof
         } else {
-            let (char, pos) = &self.line_chars[self.position];
-            CharResult::Value(*char, *pos)
+            let (char, pos) = self.line_chars[self.position];
+            CharResult::Value(char, pos)
         }
     }
 
@@ -137,16 +137,17 @@ impl Default for CFileReader {
     }
 }
 
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub enum CharResult {
     Value(char, u32),
     Eof,
 }
 
 impl CharResult {
-    pub fn value_or_null_char(&self) -> char {
+    pub fn value_or_null_char(self) -> char {
         match self {
-            CharResult::Value(v, ..) => *v,
-            _ => '\0',
+            CharResult::Value(v, ..) => v,
+            CharResult::Eof => '\0',
         }
     }
 }

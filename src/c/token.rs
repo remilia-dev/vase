@@ -293,12 +293,12 @@ impl CTokenKind {
 
     pub fn set_link(&mut self, val: usize) {
         use CTokenKind::*;
-        match self {
-            PreIf { link }
-            | PreIfDef { link }
-            | PreIfNDef { link }
-            | PreElif { link }
-            | PreElse { link } => *link = val,
+        match *self {
+            PreIf { ref mut link }
+            | PreIfDef { ref mut link }
+            | PreIfNDef { ref mut link }
+            | PreElif { ref mut link }
+            | PreElse { ref mut link } => *link = val,
             _ => {},
         }
     }
@@ -326,7 +326,7 @@ impl CTokenKind {
 
     pub fn get_id_join_text(&self) -> &str {
         use CTokenKind::*;
-        match self {
+        match *self {
             Auto => "auto",
             Break => "break",
             Case => "case",
@@ -375,8 +375,8 @@ impl CTokenKind {
             Pragma => "_Pragma",
             StaticAssert => "_Static_assert",
             ThreadLocal => "_Thread_local",
-            Identifier(id) => id.string(),
-            Number(num) => num.string(),
+            Identifier(ref id) => id.string(),
+            Number(ref num) => num.string(),
             _ => panic!(
                 "get_id_joinable_text should only be used on tokens that are is_id_joinable."
             ),
@@ -392,22 +392,22 @@ pub enum CIncludeType {
     IncludeNext,   // For #include_next "file"
 }
 impl CIncludeType {
-    pub fn is_end_char(&self, c: char) -> bool {
+    pub fn is_end_char(self, c: char) -> bool {
         match c {
-            '"' => *self == CIncludeType::IncludeLocal,
-            '>' => *self == CIncludeType::IncludeSystem,
+            '"' => self == CIncludeType::IncludeLocal,
+            '>' => self == CIncludeType::IncludeSystem,
             _ => false,
         }
     }
 
-    pub fn check_relative(&self) -> bool {
+    pub fn check_relative(self) -> bool {
         return matches!(
             self,
             CIncludeType::IncludeLocal | CIncludeType::IncludeNext
         );
     }
 
-    pub fn ignore_own_file(&self) -> bool {
+    pub fn ignore_own_file(self) -> bool {
         return matches!(self, CIncludeType::IncludeNext);
     }
 }

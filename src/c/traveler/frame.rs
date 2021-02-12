@@ -88,15 +88,15 @@ impl Frame {
     /// Returns if the frame has ran out of values.
     pub fn increment_index(&mut self) -> bool {
         use Frame::*;
-        match self {
+        match *self {
             // Single tokens have no index to increment.
             SingleToken { .. } => false,
-            File { index, end, .. }
-            | ObjectMacro { index, end, .. }
-            | FuncMacro { index, end, .. }
-            | FuncArg { index, end, .. } => {
+            File { ref mut index, end, .. }
+            | ObjectMacro { ref mut index, end, .. }
+            | FuncMacro { ref mut index, end, .. }
+            | FuncArg { ref mut index, end, .. } => {
                 *index = index.wrapping_add(1);
-                index < end
+                *index < end
             },
         }
     }
@@ -104,7 +104,7 @@ impl Frame {
     /// # Panics
     /// If this frame is not a FuncMacro frame.
     pub fn get_param_token(&self, param_id: usize, index: usize) -> &CToken {
-        if let Frame::FuncMacro { params, .. } = self {
+        if let Frame::FuncMacro { ref params, .. } = *self {
             &params.get(&param_id).unwrap()[index]
         } else {
             panic!("get_param should only be called on a FuncMacro frame!")

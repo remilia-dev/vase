@@ -90,6 +90,37 @@ impl<T> AtomicArc<T> {
         // SAFETY: We now the ptr is the result of Arc::into_raw and the ptr is stored in self.ptr
         Some(unsafe { Self::increment_and_make_arc(ptr) })
     }
+    /// Loads the value contained within or attempts to set the value if there was none.
+    ///
+    /// If self already contains a value, it will be loaded and returned.
+    /// If self did not contain a value, it will call the creation function
+    /// and attempt to set it. Despite calling the creation function, another thread
+    /// may set the value before this one can. In that case, the newly created value
+    /// will be discarded.
+    pub fn load_or_set_arc<F>(&self, create: F) -> Arc<T>
+    where F: FnOnce() -> Arc<T> {
+        let ptr = self.load_ptr(Ordering::SeqCst).unwrap_or_else(|| {
+            let new_value = create();
+            let new_ptr = Arc::as_ptr(&new_value) as *mut T;
+            match self
+                .ptr
+                .compare_exchange(null_mut(), new_ptr, Ordering::SeqCst, Ordering::SeqCst)
+            {
+                Ok(_) => {
+                    std::mem::forget(new_value);
+                    // SAFETY: new_ptr is from an allocated Arc, so it can't be null.
+                    unsafe { NonNull::new_unchecked(new_ptr) }
+                },
+                Err(ptr) => unsafe {
+                    // SAFETY: Since the compare-and-exchange failed, this ptr can't be null.
+                    NonNull::new_unchecked(ptr)
+                },
+            }
+        });
+        // SAFETY: Either this pointer is from this object (which should then be an Arc ptr)
+        // or it is from a freshly created Arc (in which case it was stored in self.ptr).
+        unsafe { AtomicArc::increment_and_make_arc(ptr) }
+    }
     /// Loads the internal pointer that represents the Arc.
     /// This pointer should be from [Arc::into_raw].
     fn load_ptr(&self, order: Ordering) -> Option<NonNull<T>> {
