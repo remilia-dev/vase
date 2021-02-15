@@ -8,6 +8,7 @@ use crate::{
             MacroKind,
         },
         CCompileEnv,
+        CKeyword,
         CStringType,
         CToken,
         CTokenKind,
@@ -100,12 +101,16 @@ impl CTraveler {
                     unimplemented!("TODO: Error")
                 },
                 PrePragma => unimplemented!("#pragma isn't implemented yet."),
-                Pragma => {
+                Keyword(CKeyword::Pragma, ..) => {
                     unimplemented!("_Pragma isn't implemented yet.")
                 },
-                Identifier(ref id) => match self.frames.should_handle_macro(id.uniq_id()) {
-                    Some(handle) => self.frames.handle_macro(handle),
-                    None => break,
+                ref token if token.is_definable() => {
+                    let definable_id = token.get_definable_id();
+                    if let Some(handle) = self.frames.should_handle_macro(definable_id) {
+                        self.frames.handle_macro(handle);
+                    } else {
+                        break;
+                    }
                 },
                 Hash { .. } => {
                     unimplemented!("# isn't implemented yet.")
@@ -191,7 +196,7 @@ impl CTraveler {
                 id_combined.push_str(id2);
                 let cached = self.env.cache().get_or_cache(id_combined.as_str());
                 if let Some(keyword) = self.env.cached_to_keywords().get(&cached) {
-                    keyword.clone()
+                    Keyword(*keyword, cached.uniq_id())
                 } else {
                     Identifier(cached)
                 }
@@ -215,8 +220,8 @@ impl CTraveler {
 
     fn handle_if_def(&mut self, if_def: bool, link: usize) {
         let defined = match *self.frames.move_forward().kind() {
-            Identifier(ref id) => {
-                let macro_id = id.uniq_id();
+            ref token if token.is_definable() => {
+                let macro_id = token.get_definable_id();
                 self.frames.has_macro(macro_id)
             },
             PreEnd => {
@@ -243,7 +248,7 @@ impl CTraveler {
 
     fn handle_define(&mut self) {
         let macro_id = match *self.frames.move_forward().kind() {
-            Identifier(ref id) => id.uniq_id(),
+            ref token if token.is_definable() => token.get_definable_id(),
             PreEnd => {
                 // TODO: Report missing identifier.
                 eprintln!("Missing identifier to define");
@@ -279,7 +284,7 @@ impl CTraveler {
         let mut var_arg = None;
         loop {
             match *self.frames.move_forward().kind() {
-                Identifier(ref id) => params.push(id.uniq_id()),
+                ref token if token.is_definable() => params.push(token.get_definable_id()),
                 DotDotDot => {
                     var_arg = Some(self.env.cache().get_or_cache("__VA_ARGS__").uniq_id());
                     break;
@@ -365,8 +370,8 @@ impl CTraveler {
 
     fn handle_undef(&mut self) {
         match *self.frames.move_forward().kind() {
-            Identifier(ref id) => {
-                let macro_id = id.uniq_id();
+            ref token if token.is_definable() => {
+                let macro_id = token.get_definable_id();
                 self.frames.remove_macro(macro_id);
             },
             PreEnd => {
