@@ -526,7 +526,7 @@ impl<'a> CLexer<'a> {
         let cached = self.read_cached_identifier(first_char);
 
         if let Some(keyword) = self.env.cached_to_keywords().get(&cached) {
-            return keyword.clone();
+            return CTokenKind::Keyword(*keyword, cached.uniq_id());
         }
 
         if let Some(str_type) = self.env.cached_to_str_prefix().get(&cached).cloned() {

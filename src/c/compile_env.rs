@@ -12,6 +12,7 @@ use crate::{
     c::{
         CCompileSettings,
         CIncludeType,
+        CKeyword,
         CLangVersion,
         CStringType,
         CTokenKind,
@@ -31,7 +32,7 @@ pub struct CCompileEnv {
     settings: CCompileSettings,
     threads: Arc<ThreadPool>,
     cache: StringCache,
-    cached_to_keywords: HashMap<CachedString, CTokenKind>,
+    cached_to_keywords: HashMap<CachedString, CKeyword>,
     cached_to_preprocessor: HashMap<CachedString, CTokenKind>,
     cached_to_str_prefix: HashMap<CachedString, CStringType>,
     // OPTIMIZATION: Maybe OnceArray should operate on Arcs rather than boxes.
@@ -62,7 +63,7 @@ impl CCompileEnv {
     pub fn cache(&self) -> &StringCache {
         &self.cache
     }
-    pub fn cached_to_keywords(&self) -> &HashMap<CachedString, CTokenKind> {
+    pub fn cached_to_keywords(&self) -> &HashMap<CachedString, CKeyword> {
         &self.cached_to_keywords
     }
     pub fn cached_to_preprocessor(&self) -> &HashMap<CachedString, CTokenKind> {
@@ -120,10 +121,11 @@ impl CCompileEnv {
 }
 
 fn update_cache_maps(env: &mut CCompileEnv) {
+    use CKeyword::*;
     use CTokenKind::*;
     let version = env.settings.version;
 
-    let mut map_keyword = |s: &str, kind: CTokenKind| {
+    let mut map_keyword = |s: &str, kind: CKeyword| {
         let cached = env.cache.get_or_cache(s);
         env.cached_to_keywords.insert(cached, kind);
     };

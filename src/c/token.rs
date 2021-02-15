@@ -57,6 +57,7 @@ pub enum CTokenKind {
     },
     Message(Arc<Box<str>>),
     Identifier(CachedString),
+    Keyword(CKeyword, usize),
     Number(CachedString),
     String {
         str_type: CStringType,
@@ -97,57 +98,6 @@ pub enum CTokenKind {
     PreIncludeNext,
     PreWarning,
     // == End Preprocessors
-
-    // == Begin Keywords
-    Auto,
-    Break,
-    Case,
-    Char,
-    Const,
-    Continue,
-    Default,
-    Do,
-    Double,
-    Else,
-    Enum,
-    Extern,
-    Float,
-    For,
-    Goto,
-    If,
-    Inline,
-    Int,
-    Long,
-    Register,
-    Restrict,
-    Return,
-    Short,
-    Signed,
-    Sizeof,
-    Static,
-    Struct,
-    Switch,
-    Typedef,
-    Union,
-    Unsigned,
-    Void,
-    Volatile,
-    While,
-    Alignas,
-    Alignof,
-    Atomic,
-    Bool,
-    Complex,
-    Decimal32,
-    Decimal64,
-    Decimal128,
-    Generic,
-    Imaginary,
-    Noreturn,
-    Pragma,
-    StaticAssert,
-    ThreadLocal,
-    // == End Keywords
 
     // == Begin Symbols
     /// `[` when alt is false
@@ -303,30 +253,99 @@ impl CTokenKind {
         }
     }
 
-    pub fn is_keyword(&self) -> bool {
-        use CTokenKind::*;
-        // NOTE: The comments are there to keep rustfmt happy.
-        matches!(
-            self,
-            Auto | Break | Case | Char | Const | Continue | Default | Do | Double | Else | Enum // 1
-            | Extern | Float | For | Goto | If | Inline | Int | Long | Register | Restrict // 2
-            | Return | Short | Signed | Sizeof | Static | Struct | Switch | Typedef | Union // 3
-            | Unsigned | Void | Volatile | While | Alignas | Alignof | Atomic | Bool // 4
-            | Decimal32 | Decimal64 | Decimal128 | Complex | Generic | Imaginary | Noreturn // 5
-            | Pragma | StaticAssert | ThreadLocal // 6
-        )
-    }
-
     /// Is able to be joined using ## with another token that is id-joinable.
     ///
     /// For example `int ## ID` is joinable to produce the identifier `intId`.
     pub fn is_id_joinable(&self) -> bool {
-        self.is_keyword() || matches!(self, CTokenKind::Identifier(..) | CTokenKind::Number(..))
+        use CTokenKind::*;
+        matches!(self, Identifier(..) | Keyword(..) | Number(..))
     }
 
     pub fn get_id_join_text(&self) -> &str {
         use CTokenKind::*;
         match *self {
+            Identifier(ref id) => id.string(),
+            Keyword(keyword, ..) => keyword.text(),
+            Number(ref num) => num.string(),
+            _ => panic!(
+                "get_id_joinable_text should only be used on tokens that are is_id_joinable."
+            ),
+        }
+    }
+
+    pub fn is_definable(&self) -> bool {
+        use CTokenKind::*;
+        matches!(self, Identifier(..) | Keyword(..))
+    }
+
+    pub fn get_definable_id(&self) -> usize {
+        use CTokenKind::*;
+        match *self {
+            Identifier(ref id) => id.uniq_id(),
+            Keyword(_, unique_id) => unique_id,
+            _ => panic!(
+                "get_definable_unique_id should only be used on tokens that are is_definable."
+            ),
+        }
+    }
+}
+
+#[repr(u8)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum CKeyword {
+    Auto,
+    Break,
+    Case,
+    Char,
+    Const,
+    Continue,
+    Default,
+    Do,
+    Double,
+    Else,
+    Enum,
+    Extern,
+    Float,
+    For,
+    Goto,
+    If,
+    Inline,
+    Int,
+    Long,
+    Register,
+    Restrict,
+    Return,
+    Short,
+    Signed,
+    Sizeof,
+    Static,
+    Struct,
+    Switch,
+    Typedef,
+    Union,
+    Unsigned,
+    Void,
+    Volatile,
+    While,
+    Alignas,
+    Alignof,
+    Atomic,
+    Bool,
+    Complex,
+    Decimal32,
+    Decimal64,
+    Decimal128,
+    Generic,
+    Imaginary,
+    Noreturn,
+    Pragma,
+    StaticAssert,
+    ThreadLocal,
+}
+impl CKeyword {
+    pub fn text(self) -> &'static str {
+        use CKeyword::*;
+        match self {
             Auto => "auto",
             Break => "break",
             Case => "case",
@@ -375,11 +394,6 @@ impl CTokenKind {
             Pragma => "_Pragma",
             StaticAssert => "_Static_assert",
             ThreadLocal => "_Thread_local",
-            Identifier(ref id) => id.string(),
-            Number(ref num) => num.string(),
-            _ => panic!(
-                "get_id_joinable_text should only be used on tokens that are is_id_joinable."
-            ),
         }
     }
 }
