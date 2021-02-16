@@ -444,6 +444,8 @@ impl<'a> CLexer<'a> {
     }
 
     fn lex_string(&mut self, str_type: CStringType, opening_char: char) -> CTokenKind {
+        self.str_builder.clear();
+
         let mut ended_correctly = false;
         let mut has_complex_escapes = false;
         while let CharResult::Value(char, ..) = self.reader.move_forward() {
