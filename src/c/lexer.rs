@@ -53,8 +53,8 @@ impl<'a> CLexer<'a> {
             include_callback,
             reader: CFileReader::new(),
             loaded_path: None,
-            str_builder: StringBuilder::new(),
-            norm_buffer: StringBuilder::new(),
+            str_builder: StringBuilder::with_capacity(30),
+            norm_buffer: StringBuilder::with_capacity(30),
             link_stack: Vec::with_capacity(5),
         }
     }

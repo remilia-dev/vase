@@ -8,9 +8,16 @@ pub struct StringBuilder {
 }
 impl StringBuilder {
     /// Creates an empty string builder.
-    pub fn new() -> StringBuilder {
+    pub fn new() -> Self {
         StringBuilder {
-            buffer: Vec::with_capacity(30),
+            buffer: Vec::default(),
+            is_ascii: true,
+        }
+    }
+    /// Creates a string builder that starts out with the given capacity.
+    pub fn with_capacity(capacity: usize) -> Self {
+        StringBuilder {
+            buffer: Vec::with_capacity(capacity),
             is_ascii: true,
         }
     }
