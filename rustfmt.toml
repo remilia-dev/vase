@@ -30,6 +30,6 @@ where_single_line = true
 
 # Some tests use weird formatting to make it easier to read.
 ignore = [
-    "tests/c/lexer/test_symbols.rs",
-    "tests/c/lexer/test_preprocessor.rs",
+    "tests/c/lexer/preprocessor.rs",
+    "tests/c/lexer/symbols.rs",
 ]
