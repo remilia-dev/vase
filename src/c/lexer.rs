@@ -121,12 +121,12 @@ impl<'a> CLexer<'a> {
         loop {
             have_skipped_whitespace |= self.reader.skip_most_whitespace();
 
-            let (character, position) = match self.reader.front() {
-                CharResult::Eof => {
+            let (character, position) = match self.reader.front_location() {
+                Some(char_location) => (char_location.char(), char_location.byte()),
+                None => {
                     self.end_line(&mut tokens);
                     break;
                 },
-                CharResult::Value(value, position) => (value, position),
             };
 
             let kind = match character {
@@ -155,7 +155,7 @@ impl<'a> CLexer<'a> {
                 c => self.lex_identifier(c),
             };
 
-            let length = u16::try_from(self.reader.distance_from(position)).unwrap_or(u16::MAX);
+            let length = u16::try_from(self.reader.get_and_clear_length()).unwrap_or(u16::MAX);
 
             tokens.append(CToken::new(
                 tokens.file_id(),
@@ -192,6 +192,7 @@ impl<'a> CLexer<'a> {
             ));
         }
         self.reader.move_forward();
+        self.reader.get_and_clear_length();
     }
 
     // This function is long just due to the various combinations. Splitting it up would be less clear.
@@ -206,9 +207,9 @@ impl<'a> CLexer<'a> {
             '{' => CTokenKind::LBrace { alt: false },
             '}' => CTokenKind::RBrace { alt: false },
             '.' => {
-                return match self.reader.move_forward().value_or_null_char() {
+                return match self.reader.move_forward() {
                     // This whole section returns early to allow parsing ... with moving backwards.
-                    '.' => {
+                    Some('.') => {
                         if self.reader.move_forward_if_next('.') {
                             self.reader.move_forward();
                             CTokenKind::DotDotDot
@@ -216,51 +217,51 @@ impl<'a> CLexer<'a> {
                             CTokenKind::Dot
                         }
                     },
-                    c if c.is_ascii_digit() => return self.lex_number(true, c),
+                    Some(c) if c.is_ascii_digit() => return self.lex_number(true, c),
                     _ => CTokenKind::Dot,
                 };
             },
-            '&' => match self.reader.move_forward().value_or_null_char() {
-                '=' => CTokenKind::AmpEqual,
-                '&' => CTokenKind::AmpAmp,
+            '&' => match self.reader.move_forward() {
+                Some('=') => CTokenKind::AmpEqual,
+                Some('&') => CTokenKind::AmpAmp,
                 // To prevent an extra move_forward, we return early.
                 _ => return CTokenKind::Amp,
             },
-            '*' => match self.reader.move_forward().value_or_null_char() {
-                '=' => CTokenKind::StarEqual,
+            '*' => match self.reader.move_forward() {
+                Some('=') => CTokenKind::StarEqual,
                 // To prevent an extra move_forward, we return early.
                 _ => return CTokenKind::Star,
             },
-            '+' => match self.reader.move_forward().value_or_null_char() {
-                '=' => CTokenKind::PlusEqual,
-                '+' => CTokenKind::PlusPlus,
+            '+' => match self.reader.move_forward() {
+                Some('=') => CTokenKind::PlusEqual,
+                Some('+') => CTokenKind::PlusPlus,
                 // To prevent an extra move_forward, we return early.
                 _ => return CTokenKind::Plus,
             },
-            '-' => match self.reader.move_forward().value_or_null_char() {
-                '=' => CTokenKind::MinusEqual,
-                '-' => CTokenKind::MinusMinus,
-                '>' => CTokenKind::Arrow,
+            '-' => match self.reader.move_forward() {
+                Some('=') => CTokenKind::MinusEqual,
+                Some('-') => CTokenKind::MinusMinus,
+                Some('>') => CTokenKind::Arrow,
                 // To prevent an extra move_forward, we return early.
                 _ => return CTokenKind::Minus,
             },
             '~' => CTokenKind::Tilde,
-            '!' => match self.reader.move_forward().value_or_null_char() {
-                '=' => CTokenKind::BangEqual,
+            '!' => match self.reader.move_forward() {
+                Some('=') => CTokenKind::BangEqual,
                 // To prevent an extra move_forward, we return early.
                 _ => return CTokenKind::Bang,
             },
-            '/' => match self.reader.move_forward().value_or_null_char() {
-                '=' => CTokenKind::SlashEqual,
+            '/' => match self.reader.move_forward() {
+                Some('=') => CTokenKind::SlashEqual,
                 // NOTE: Comments should have been handled in the main match in self.lex
                 // To prevent an extra move_forward, we return early.
                 _ => return CTokenKind::Slash,
             },
-            '%' => match self.reader.move_forward().value_or_null_char() {
-                '=' => CTokenKind::PercentEqual,
-                '>' => CTokenKind::RBrace { alt: true },
-                ':' => {
-                    if self.reader.move_forward().value_or_null_char() == '%'
+            '%' => match self.reader.move_forward() {
+                Some('=') => CTokenKind::PercentEqual,
+                Some('>') => CTokenKind::RBrace { alt: true },
+                Some(':') => {
+                    if self.reader.move_forward() == Some('%')
                         && self.reader.move_forward_if_next(':')
                     {
                         // Move past the last : (in %:%:)
@@ -273,60 +274,60 @@ impl<'a> CLexer<'a> {
                 // To prevent an extra move_forward, we return early.
                 _ => return CTokenKind::Percent,
             },
-            '<' => match self.reader.move_forward().value_or_null_char() {
-                '=' => CTokenKind::LAngleEqual,
-                '<' => {
+            '<' => match self.reader.move_forward() {
+                Some('=') => CTokenKind::LAngleEqual,
+                Some('<') => {
                     if self.reader.move_forward_if_next('=') {
                         CTokenKind::LShiftEqual
                     } else {
                         CTokenKind::LShift
                     }
                 },
-                '%' => CTokenKind::LBrace { alt: true },
-                ':' => CTokenKind::LBracket { alt: true },
+                Some('%') => CTokenKind::LBrace { alt: true },
+                Some(':') => CTokenKind::LBracket { alt: true },
                 // To prevent an extra move_forward, we return early.
                 _ => return CTokenKind::LAngle,
             },
             '>' => {
-                match self.reader.move_forward().value_or_null_char() {
-                    '>' => {
+                match self.reader.move_forward() {
+                    Some('>') => {
                         if self.reader.move_forward_if_next('=') {
                             CTokenKind::RShiftEqual
                         } else {
                             CTokenKind::RShift
                         }
                     },
-                    '=' => CTokenKind::RAngleEqual,
+                    Some('=') => CTokenKind::RAngleEqual,
                     // To prevent an extra move_forward, we return early.
                     _ => return CTokenKind::RAngle,
                 }
             },
-            '=' => match self.reader.move_forward().value_or_null_char() {
-                '=' => CTokenKind::EqualEqual,
+            '=' => match self.reader.move_forward() {
+                Some('=') => CTokenKind::EqualEqual,
                 // To prevent an extra move_forward, we return early.
                 _ => return CTokenKind::Equal,
             },
-            '^' => match self.reader.move_forward().value_or_null_char() {
-                '=' => CTokenKind::CarrotEqual,
+            '^' => match self.reader.move_forward() {
+                Some('=') => CTokenKind::CarrotEqual,
                 // To prevent an extra move_forward, we return early.
                 _ => return CTokenKind::Carrot,
             },
-            '|' => match self.reader.move_forward().value_or_null_char() {
-                '=' => CTokenKind::BarEqual,
-                '|' => CTokenKind::BarBar,
+            '|' => match self.reader.move_forward() {
+                Some('=') => CTokenKind::BarEqual,
+                Some('|') => CTokenKind::BarBar,
                 // To prevent an extra move_forward, we return early.
                 _ => return CTokenKind::Bar,
             },
             '?' => CTokenKind::QMark,
-            ':' => match self.reader.move_forward().value_or_null_char() {
-                '>' => CTokenKind::RBracket { alt: true },
+            ':' => match self.reader.move_forward() {
+                Some('>') => CTokenKind::RBracket { alt: true },
                 // To prevent an extra move_forward, we return early.
                 _ => return CTokenKind::Colon,
             },
             ';' => CTokenKind::Semicolon,
             ',' => CTokenKind::Comma,
-            '#' => match self.reader.move_forward().value_or_null_char() {
-                '#' => CTokenKind::HashHash { alt: false },
+            '#' => match self.reader.move_forward() {
+                Some('#') => CTokenKind::HashHash { alt: false },
                 // To prevent an extra move_forward, we return early.
                 _ => return self.lex_preprocessor(tokens, false),
             },
@@ -352,9 +353,8 @@ impl<'a> CLexer<'a> {
         self.reader.skip_most_whitespace();
 
         let first_char = match self.reader.front() {
-            CharResult::Value(val, ..) if val != '\n' => val,
-            // If an error occurred, the EOF has been reached, or the end-of-line has been reached
-            // we want to return a blank preprocessor instruction.
+            Some(c) if c != '\n' => c,
+            // If the EOF or a new line is next, we just want to return a blank preprocessor instruction.
             _ => return CTokenKind::PreBlank,
         };
 
@@ -403,7 +403,7 @@ impl<'a> CLexer<'a> {
 
         self.str_builder.clear();
         let mut correctly_ended = false;
-        while let CharResult::Value(char, ..) = self.reader.move_forward() {
+        while let Some(char) = self.reader.move_forward() {
             match char {
                 '\n' => break,
                 '"' | '>' if inc_type.is_end_char(char) => {
@@ -436,7 +436,7 @@ impl<'a> CLexer<'a> {
     fn lex_message(&mut self, first_char: char) -> CTokenKind {
         self.str_builder.clear();
         self.str_builder.append_char(first_char);
-        while let CharResult::Value(char, ..) = self.reader.move_forward() {
+        while let Some(char) = self.reader.move_forward() {
             if char == '\n' {
                 break;
             }
@@ -452,27 +452,28 @@ impl<'a> CLexer<'a> {
 
         let mut ended_correctly = false;
         let mut has_complex_escapes = false;
-        while let CharResult::Value(char, ..) = self.reader.move_forward() {
+        while let Some(char) = self.reader.move_forward() {
             match char {
                 '\\' => {
-                    let simple_escape = match self.reader.move_forward().value_or_null_char() {
-                        '\'' => '\'',
-                        '"' => '"',
-                        '?' => '?',
-                        '\\' => '\\',
-                        'a' => '\x07',
-                        'b' => '\x08',
-                        'f' => '\x0C',
-                        'n' => '\n',
-                        'r' => '\r',
-                        't' => '\t',
-                        'v' => '\x0B',
-                        c => {
+                    let simple_escape = match self.reader.move_forward() {
+                        Some('\'') => '\'',
+                        Some('"') => '"',
+                        Some('?') => '?',
+                        Some('\\') => '\\',
+                        Some('a') => '\x07',
+                        Some('b') => '\x08',
+                        Some('f') => '\x0C',
+                        Some('n') => '\n',
+                        Some('r') => '\r',
+                        Some('t') => '\t',
+                        Some('v') => '\x0B',
+                        Some(c) => {
                             self.str_builder.append_ascii(b'\\');
                             self.str_builder.append_char(c);
                             has_complex_escapes = true;
                             continue;
                         },
+                        None => break,
                     };
                     self.str_builder.append_char(simple_escape);
                 },
@@ -508,7 +509,7 @@ impl<'a> CLexer<'a> {
         // NOTE: All characters in a number are ascii
         self.str_builder.append_ascii(first_char as u8);
 
-        while let CharResult::Value(char, ..) = self.reader.move_forward() {
+        while let Some(char) = self.reader.move_forward() {
             match char {
                 'e' | 'E' | 'p' | 'P' => {
                     self.str_builder.append_ascii(char as u8);
@@ -536,7 +537,7 @@ impl<'a> CLexer<'a> {
         }
 
         if let Some(str_type) = self.env.cached_to_str_prefix().get(&cached).cloned() {
-            let front_char = self.reader.front().value_or_null_char();
+            let front_char = self.reader.front().unwrap_or('\0');
             if front_char == '"' || front_char == '\'' {
                 return self.lex_string(str_type, front_char);
             }
@@ -549,7 +550,7 @@ impl<'a> CLexer<'a> {
         self.str_builder.clear();
         self.str_builder.append_char(first_char);
 
-        while let CharResult::Value(char, ..) = self.reader.move_forward() {
+        while let Some(char) = self.reader.move_forward() {
             match char {
                 c if c.is_whitespace() => break,
                 '_' => {},
@@ -575,8 +576,8 @@ impl<'a> CLexer<'a> {
     fn lex_comment(&mut self, multi_line: bool) {
         loop {
             let char = match self.reader.move_forward() {
-                CharResult::Value(cv, ..) => cv,
-                CharResult::Eof => {
+                Some(cl) => cl,
+                None => {
                     if multi_line {
                         // TODO: Communicate the warning
                         println!("TODO: End-of-file hit before the end of multi-line comment.");
