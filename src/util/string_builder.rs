@@ -28,6 +28,10 @@ impl StringBuilder {
         self.buffer.clear();
         self.is_ascii = true;
     }
+    /// Reserves capacity for at least additional amount of characters.
+    pub fn reserve(&mut self, additional: usize) {
+        self.buffer.reserve(additional)
+    }
     /// Adds a known-ASCII character to the buffer.
     /// This is *may* be faster than `append_char`.
     /// # Panics
@@ -43,7 +47,26 @@ impl StringBuilder {
         } else {
             self.is_ascii = false;
             let mut bytes = [0u8; 4];
-            self.append_str(c.encode_utf8(&mut bytes));
+            // SAFETY: We've already set is_ascii to false.
+            unsafe {
+                self.append_str_unchecked(c.encode_utf8(&mut bytes))
+            };
+        }
+    }
+    /// Adds the given str to the buffer.
+    pub fn append_str(&mut self, s: &str) {
+        for b in s.as_bytes() {
+            self.is_ascii &= b.is_ascii();
+            self.buffer.push(*b);
+        }
+    }
+    /// Adds all characters of the string to the buffer without checking.
+    /// # Safety
+    /// This function is safe only if self.is_ascii is false or the given string is ASCII-only.
+    pub unsafe fn append_str_unchecked(&mut self, string: &str) {
+        self.buffer.reserve(string.len());
+        for byte in string.as_bytes() {
+            self.buffer.push(*byte);
         }
     }
     /// Returns a reference to the current buffer.
@@ -62,15 +85,6 @@ impl StringBuilder {
     /// Returns whether the buffer is made of only ASCII or not.
     pub fn is_ascii(&self) -> bool {
         self.is_ascii
-    }
-
-    /// Adds all characters of the string to the buffer.
-    /// # Note
-    fn append_str(&mut self, string: &str) {
-        self.buffer.reserve(string.len());
-        for byte in string.as_bytes() {
-            self.buffer.push(*byte);
-        }
     }
 }
 impl Default for StringBuilder {
