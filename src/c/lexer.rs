@@ -1,5 +1,6 @@
 // Copyright 2021. remilia-dev
 // This source code is licensed under GPLv3 or any later version.
+use std::convert::TryFrom;
 use std::fs::File;
 use std::path::Path;
 
@@ -74,7 +75,7 @@ impl<'a> CLexer<'a> {
             if file.metadata().unwrap().len() == 0 {
                 // Can't memory map a 0-byte file.
                 let mut stack = CTokenStack::new(file_id, &Some(file_path));
-                stack.append(CToken::new(0, 0, CTokenKind::Eof, false));
+                stack.append(CToken::new(0, 0, 0, false, CTokenKind::Eof));
                 return Result::Ok(stack);
             }
 
@@ -111,7 +112,7 @@ impl<'a> CLexer<'a> {
 
         let mut tokens = CTokenStack::new(file_id, &self.loaded_path);
         if self.reader.is_empty() {
-            tokens.append(CToken::new(0, 0, CTokenKind::Eof, false));
+            tokens.append(CToken::new(0, 0, 0, false, CTokenKind::Eof));
             tokens.finalize();
             return tokens;
         }
@@ -154,23 +155,25 @@ impl<'a> CLexer<'a> {
                 c => self.lex_identifier(c),
             };
 
-            let length = self.reader.distance_from(position);
+            let length = u16::try_from(self.reader.distance_from(position)).unwrap_or(u16::MAX);
 
             tokens.append(CToken::new(
+                tokens.file_id(),
                 position,
                 length,
-                kind,
                 have_skipped_whitespace,
+                kind,
             ));
             self.at_start_of_line = false;
             have_skipped_whitespace = false;
         }
 
         tokens.append(CToken::new(
+            tokens.file_id(),
             self.reader.last_byte(),
             0,
-            CTokenKind::Eof,
             false,
+            CTokenKind::Eof,
         ));
 
         tokens.finalize();
@@ -181,10 +184,11 @@ impl<'a> CLexer<'a> {
         if self.mode != CLexerMode::Normal {
             self.mode = CLexerMode::Normal;
             tokens.append(CToken::new(
+                tokens.file_id(),
                 self.reader.position(),
                 0,
-                CTokenKind::PreEnd,
                 false,
+                CTokenKind::PreEnd,
             ));
         }
         self.reader.move_forward();

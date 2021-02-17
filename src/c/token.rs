@@ -1,50 +1,63 @@
 // Copyright 2021. remilia-dev
 // This source code is licensed under GPLv3 or any later version.
 use crate::{
+    c::FileId,
     sync::Arc,
     util::CachedString,
 };
 
 #[derive(Clone, Debug)]
 pub struct CToken {
+    file_id: FileId,
     byte: u32,
-    byte_length: u32,
-    kind: CTokenKind,
+    byte_length: u16,
     whitespace_before: bool,
+    kind: CTokenKind,
 }
 impl CToken {
-    pub fn new(byte: u32, byte_length: u32, kind: CTokenKind, whitespace_before: bool) -> CToken {
+    pub fn new(
+        file_id: FileId,
+        byte: u32,
+        byte_length: u16,
+        whitespace_before: bool,
+        kind: CTokenKind,
+    ) -> CToken {
         CToken {
+            file_id,
             byte,
             byte_length,
-            kind,
             whitespace_before,
+            kind,
         }
     }
 
     pub fn new_unknown(kind: CTokenKind) -> CToken {
         CToken {
+            file_id: u32::MAX,
             byte: u32::MAX,
-            byte_length: u32::MAX,
+            byte_length: u16::MAX,
             whitespace_before: true,
             kind,
         }
     }
 
+    pub fn file_id(&self) -> FileId {
+        self.file_id
+    }
     pub fn byte(&self) -> u32 {
         self.byte
     }
-    pub fn byte_length(&self) -> u32 {
+    pub fn byte_length(&self) -> u16 {
         self.byte_length
+    }
+    pub fn whitespace_before(&self) -> bool {
+        self.whitespace_before
     }
     pub fn kind(&self) -> &CTokenKind {
         &self.kind
     }
     pub fn kind_mut(&mut self) -> &mut CTokenKind {
         &mut self.kind
-    }
-    pub fn whitespace_before(&self) -> bool {
-        self.whitespace_before
     }
 }
 
@@ -55,6 +68,7 @@ pub enum CTokenKind {
         inc_type: CIncludeType,
         path: CachedString,
     },
+    // OPTIMIZATION: Remove the excess Box (See String too). This would involve using some thin-dst type.
     Message(Arc<Box<str>>),
     Identifier(CachedString),
     Keyword(CKeyword, usize),
