@@ -76,7 +76,7 @@ impl<'a> CLexer<'a> {
                 // Can't memory map a 0-byte file.
                 let mut stack = CTokenStack::new(file_id, &Some(file_path));
                 stack.append(CToken::new(0, 0, 0, false, CTokenKind::Eof));
-                return Result::Ok(stack);
+                return Ok(stack);
             }
 
             // OPTIMIZATION: Would getting away from memory mapping be faster?
@@ -93,7 +93,7 @@ impl<'a> CLexer<'a> {
         }
 
         self.loaded_path = Some(file_path);
-        Result::Ok(self.lex(file_id))
+        Ok(self.lex(file_id))
     }
 
     pub fn lex_bytes(&mut self, file_id: FileId, bytes: &[u8]) -> Result<CTokenStack, CError> {
@@ -101,7 +101,7 @@ impl<'a> CLexer<'a> {
             return Result::Err(CError::Utf8DecodeError(err));
         }
         self.loaded_path = None;
-        Result::Ok(self.lex(file_id))
+        Ok(self.lex(file_id))
     }
 
     #[must_use]

@@ -321,9 +321,9 @@ impl<const NODE_COUNT: usize> TrieNode for TrieNodeLimited<NODE_COUNT> {
     fn get_or_cache_string(&self, data: &mut CacheRequest) -> Result<CachedString, &dyn TrieNode> {
         if data.len() == data.depth {
             let value = self.node_value.load_or_set_arc(&|| data.new_cached());
-            Result::Ok(value)
+            Ok(value)
         } else if let Some(value) = self.move_or_get_end_value(data) {
-            Result::Ok(value)
+            Ok(value)
         } else {
             self.find_next_node(data)
         }
@@ -415,14 +415,14 @@ impl TrieNodePtr {
                 let new_cached = data.new_cached();
                 let new_node = TrieNodePtr::new_end(new_cached.clone(), data.depth + 1);
                 match self.set_if_null(new_node) {
-                    Ok(_) => return Result::Ok(new_cached),
+                    Ok(_) => return Ok(new_cached),
                     Err(ptr) => ptr,
                 }
             },
         };
 
         data.depth += 1;
-        Result::Err(TrieNodePtr::get_trait(node_ptr))
+        Err(TrieNodePtr::get_trait(node_ptr))
     }
 
     fn get_or_create_chain(&self, depth: usize) -> &dyn TrieNode {

@@ -36,7 +36,7 @@ impl CFileReader {
                 Ok(cb) => cb,
                 Err(err) => {
                     self.line_chars.clear();
-                    return Option::Some(err);
+                    return Some(err);
                 },
             };
 
@@ -71,7 +71,7 @@ impl CFileReader {
 
         self.last_byte = byte_pos as u32;
 
-        Option::None
+        None
     }
 
     pub fn last_byte(&self) -> u32 {

@@ -39,19 +39,19 @@ impl CharExt for char {
                 // SAFETY: Bytes with no leading 1s are ASCII characters.
                 let char = unsafe { std::char::from_u32_unchecked(first_byte as u32) };
 
-                return Result::Ok(DecodedChar { char, byte_count: 1 });
+                return Ok(DecodedChar { char, byte_count: 1 });
             },
-            1 => return Result::Err(Utf8DecodeError::MisalignedRead { byte_position: offset }),
+            1 => return Err(Utf8DecodeError::MisalignedRead { byte_position: offset }),
             2..=4 => {
                 if offset + byte_count > bytes.len() {
-                    return Result::Err(Utf8DecodeError::MissingBytes {
+                    return Err(Utf8DecodeError::MissingBytes {
                         byte_position: offset,
                         missing_byte_count: offset + byte_count - bytes.len(),
                     });
                 }
             },
             _ => {
-                return Result::Err(Utf8DecodeError::InvalidByte {
+                return Err(Utf8DecodeError::InvalidByte {
                     byte_position: offset,
                     bad_byte: first_byte,
                 });
@@ -88,7 +88,7 @@ impl CharExt for char {
         let char_val = match std::char::from_u32(raw_char) {
             Some(char) => char,
             None => {
-                return Result::Err(Utf8DecodeError::InvalidCharacter {
+                return Err(Utf8DecodeError::InvalidCharacter {
                     byte_position: offset,
                     bad_codepoint: raw_char,
                 });
@@ -96,14 +96,14 @@ impl CharExt for char {
         };
 
         if (raw_char & mask_check) == 0 {
-            return Result::Err(Utf8DecodeError::OverlongEncoding {
+            return Err(Utf8DecodeError::OverlongEncoding {
                 byte_position: offset,
                 bad_byte_count: byte_count,
                 encoded_character: char_val,
             });
         }
 
-        Result::Ok(DecodedChar { char: char_val, byte_count })
+        Ok(DecodedChar { char: char_val, byte_count })
     }
 }
 
