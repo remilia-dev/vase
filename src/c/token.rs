@@ -288,6 +288,18 @@ impl CTokenKind {
             ),
         }
     }
+
+    pub fn is_preprocessor(&self) -> bool {
+        // PreBlank isn't treated like a preprocessor because it isn't followed by a PreEnd.
+        use CTokenKind::*;
+        matches!(
+            *self,
+            // Comments are to make rustfmt happy.
+            PreIf { .. } | PreIfDef { .. } | PreIfNDef { .. } | PreElif { .. } | PreElse { .. } // 1
+            | PreEndIf | PreDefine | PreUndef | PreLine | PreError | PrePragma | PreInclude // 2
+            | PreUnknown(..) | PreIncludeNext | PreWarning // 3
+        )
+    }
 }
 
 #[repr(u8)]

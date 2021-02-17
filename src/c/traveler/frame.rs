@@ -2,9 +2,13 @@
 // This source code is licensed under GPLv3 or any later version.
 use std::collections::HashMap;
 
-use crate::c::{
-    CToken,
-    FileId,
+use crate::{
+    c::{
+        traveler::MacroHandle,
+        CToken,
+        FileId,
+    },
+    sync::Arc,
 };
 
 #[derive(Clone, Debug)]
@@ -40,7 +44,7 @@ pub(super) enum Frame {
     ObjectMacro {
         /// The id of the file to get tokens from.
         file_id: FileId,
-        /// The current index of token we are at.
+        /// The current index of the token we are at.
         index: usize,
         /// The index this frame would be complete at.
         ///
@@ -51,33 +55,42 @@ pub(super) enum Frame {
     },
     /// A frame that represents a function macro.
     FuncMacro {
+        /// The tokens that result from combining the function macro and its arguments.
+        ///
+        /// This is list can be very massive, it is contained in an Arc for when the traveler
+        /// state is saved.
+        tokens: Arc<Vec<CToken>>,
         /// The id of the file to get tokens from.
         ///
         /// This is the file that the macro was defined in.
-        file_id: FileId,
+        //file_id: FileId,
         /// The current index of token we are at.
         index: usize,
-        /// The index this frame would be complete at.
-        ///
-        /// This will always exclude the [PreEnd](crate::c::CTokenKind::PreEnd) token.
-        end: usize,
         /// The unique id of the function macro this is from.
         macro_id: usize,
-        /// A map from a parameter's unique id to the tokens that were given for that parameter.
-        params: HashMap<usize, Vec<CToken>>,
     },
-    /// A frame that represents a function macro's parameter being used.
-    ///
-    /// A FuncArg frame should *always* be preceded by a FuncMacro frame.
-    /// This is because the parameter's tokens are read from that frame.
-    FuncArg {
+    /// A frame that is used to collect the tokens for a function macro.
+    TokenCollector {
+        /// The id of the file to get tokens from.
+        file_id: FileId,
         /// The current index of the token we are at.
         index: usize,
         /// The index this frame would be complete at.
         ///
-        /// It should be the length of the parameter's token array.
+        /// This will always *include* the [PreEnd](crate::c::CTokenKind::PreEnd) token.
         end: usize,
-        /// The unique id of the parameter to get tokens from.
+        /// A map from a unique id to the tokens the parameter makes up.
+        params: HashMap<usize, Vec<CToken>>,
+    },
+    /// A frame that represents a token collector's parameter.
+    ///
+    /// This frame should *always* be preceded by a TokenCollector frame.
+    TokenCollectorParameter {
+        /// The current index of the token we are at.
+        index: usize,
+        /// The index this frame would be complete at.
+        end: usize,
+        /// The id of the parameter to get tokens from.
         param_id: usize,
     },
 }
@@ -93,21 +106,33 @@ impl Frame {
             SingleToken { .. } => false,
             File { ref mut index, end, .. }
             | ObjectMacro { ref mut index, end, .. }
-            | FuncMacro { ref mut index, end, .. }
-            | FuncArg { ref mut index, end, .. } => {
+            | TokenCollector { ref mut index, end, .. }
+            | TokenCollectorParameter { ref mut index, end, .. } => {
                 *index = index.wrapping_add(1);
                 *index < end
             },
+            FuncMacro { ref mut index, ref tokens, .. } => {
+                *index = index.wrapping_add(1);
+                *index < tokens.len()
+            },
         }
     }
-    /// Gets a token of a parameter's token list by it's index.
-    /// # Panics
-    /// If this frame is not a FuncMacro frame.
-    pub fn get_param_token(&self, param_id: usize, index: usize) -> &CToken {
-        if let Frame::FuncMacro { ref params, .. } = *self {
-            &params.get(&param_id).unwrap()[index]
-        } else {
-            panic!("get_param should only be called on a FuncMacro frame!")
+
+    pub fn has_parameter(&self, param_id: usize) -> Option<MacroHandle> {
+        match *self {
+            Frame::TokenCollector { ref params, .. } => {
+                let param_vec = params.get(&param_id)?;
+                Some(if param_vec.is_empty() {
+                    MacroHandle::Empty
+                } else {
+                    MacroHandle::Simple(Frame::TokenCollectorParameter {
+                        param_id,
+                        index: 0,
+                        end: param_vec.len(),
+                    })
+                })
+            },
+            _ => None,
         }
     }
 }

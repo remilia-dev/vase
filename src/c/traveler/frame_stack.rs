@@ -112,21 +112,27 @@ impl FrameStack {
         match self.frames[0] {
             Frame::File { file_id, index, .. }
             | Frame::ObjectMacro { file_id, index, .. }
-            | Frame::FuncMacro { file_id, index, .. } => &self.file_refs[&file_id][index],
+            | Frame::TokenCollector { file_id, index, .. } => &self.file_refs[&file_id][index],
             Frame::SingleToken { ref token, .. } => token,
-            Frame::FuncArg { index, param_id, .. } => {
-                if let Frame::FuncMacro { ref params, .. } = self.frames[1] {
-                    &params.get(&param_id).unwrap()[index]
+            Frame::FuncMacro { index, ref tokens, .. } => &tokens[index],
+            Frame::TokenCollectorParameter { index, param_id, .. } => {
+                if let Frame::TokenCollector { ref params, .. } = self.frames[1] {
+                    &params[&param_id][index]
                 } else {
-                    panic!("There should be a FuncMacro frame before a FuncArg frame.")
+                    panic!(
+                        "TokenCollectorParameter frame should have been preceded by TokenCollector frame."
+                    );
                 }
             },
         }
     }
     /// Attempts to get a preview of the next token.
     ///
-    /// This can fail. Most of the time when the next token is outside the current macro and
-    /// `exit_macros` is false.
+    /// This can fail or return a mildly incorrect result. This can occur when:
+    /// * The next token is outside the current macro and `exit_macros` is false.
+    /// * The next token is a function parameter
+    ///
+    /// Most of the time when the next token is outside the current macro and `exit_macros` is false.
     pub fn preview_next_kind(&self, exit_macros: bool) -> Option<&CTokenKind> {
         for i in 0..self.frames.len() {
             match self.frames[i] {
@@ -141,23 +147,40 @@ impl FrameStack {
                         return None;
                     }
                 },
-                // TODO: FuncMacro should check if the next token is an argument (if so, get the first token of it)
-                // This would require a loop since empty parameters should be skipped.
-                Frame::ObjectMacro { file_id, index, end, .. }
-                | Frame::FuncMacro { file_id, index, end, .. } => {
+                Frame::ObjectMacro { file_id, index, end, .. } => {
                     if index + 1 < end {
                         return Some(self.file_refs[&file_id][index + 1].kind());
                     } else if !exit_macros {
                         return None;
                     }
                 },
-                Frame::FuncArg { param_id, index, end } => {
-                    if index + 1 > end {
-                        continue;
+                Frame::FuncMacro { index, ref tokens, .. } => {
+                    if index + 1 > tokens.len() {
+                        if exit_macros {
+                            continue;
+                        } else {
+                            return None;
+                        }
                     }
 
-                    let parent_frame = &self.frames[i - 1];
-                    return Some(parent_frame.get_param_token(param_id, index + 1).kind());
+                    return Some(tokens[index + 1].kind());
+                },
+                Frame::TokenCollector { .. } => {
+                    // We don't need look-ahead in TokenCollector frames as we're collecting the tokens here.
+                    // The only special action that occurs in token collector frames is handling
+                    // parameter substitution.
+                    return None;
+                },
+                Frame::TokenCollectorParameter { param_id, index, end, .. } => {
+                    return if index + 1 >= end {
+                        None
+                    } else if let Frame::TokenCollector { ref params, .. } = self.frames[i + 1] {
+                        Some(params[&param_id][index + 1].kind())
+                    } else {
+                        panic!(
+                            "TokenCollectorParameter frame should have been preceded by TokenCollector frame."
+                        )
+                    };
                 },
             }
         }
@@ -205,15 +228,27 @@ impl FrameStack {
     /// Returns true if a token joiner is the 'next' token.
     pub fn is_token_joiner_next(&self) -> bool {
         let frame = match self.frames[0] {
-            Frame::SingleToken { .. } => &self.frames[self.frames.len() - 2],
+            Frame::SingleToken { .. } => &self.frames[1],
             ref frame => frame,
         };
         match *frame {
-            Frame::ObjectMacro { file_id, index, .. } | Frame::FuncMacro { file_id, index, .. } => {
-                matches!(
-                    *self.file_refs[&file_id][index + 1].kind(),
-                    HashHash { .. }
-                )
+            Frame::ObjectMacro { file_id, index, end, .. } => {
+                // We want to exclude searching for a token joiner at the end of the macro.
+                if index + 1 < end - 1 {
+                    let next_token = self.file_refs[&file_id][index + 1].kind();
+                    matches!(*next_token, HashHash { .. })
+                } else {
+                    false
+                }
+            },
+            Frame::FuncMacro { index, ref tokens, .. } => {
+                // We want to exclude searching for a token joiner at the end of the macro.
+                if index + 1 < tokens.len() - 1 {
+                    let next_token = tokens[index + 1].kind();
+                    matches!(*next_token, HashHash { .. })
+                } else {
+                    false
+                }
             },
             _ => false,
         }
@@ -279,27 +314,13 @@ impl FrameStack {
     pub fn remove_macro(&mut self, macro_id: usize) {
         self.macros.remove(&macro_id);
     }
-    /// Checks if the given unique id should be handled as a macro/function macro parameter.
+    /// Checks if the given unique id should be handled as a macro.
     /// This will return None should any of the following occur:
     /// * The unique id is not the unique id of a macro.
     /// * The macro is already in-use in the frame stack.
     ///
     /// Should some value be returned, the value contains the strategy [FrameStack::handle_macro] should use.
     pub fn should_handle_macro(&self, macro_id: usize) -> Option<MacroHandle> {
-        if let Frame::FuncMacro { ref params, .. } = self.frames[0] {
-            if let Some(param_tokens) = params.get(&macro_id) {
-                if param_tokens.is_empty() {
-                    return Some(MacroHandle::Empty);
-                }
-                let frame = Frame::FuncArg {
-                    param_id: macro_id,
-                    index: 0,
-                    end: param_tokens.len(),
-                };
-                return Some(MacroHandle::Simple(frame));
-            }
-        }
-
         let mcr = self.macros.get(&macro_id)?;
 
         if self.in_macro(macro_id) {
@@ -318,11 +339,10 @@ impl FrameStack {
             },
             MacroKind::FuncMacro { ref param_ids, .. } => {
                 let param_count = param_ids.len();
-                match self.preview_next_kind(true) {
-                    Some(&CTokenKind::LParen) => {
-                        Some(MacroHandle::FuncMacro { macro_id, param_count })
-                    },
-                    _ => None,
+                if let Some(&CTokenKind::LParen) = self.preview_next_kind(true) {
+                    Some(MacroHandle::FuncMacro { macro_id, param_count })
+                } else {
+                    None
                 }
             },
         }
@@ -348,85 +368,157 @@ impl FrameStack {
         // Pass the ID of the macro
         self.move_forward();
 
+        let mut param_tokens = self.collect_func_macro_invocation(param_count);
+
+        if let MacroKind::FuncMacro {
+            file_id,
+            index,
+            end,
+            ref param_ids,
+            var_arg,
+        } = self.macros[&macro_id]
+        {
+            let id_count = param_ids.len();
+            let param_count = param_tokens.len();
+
+            let var_arg_tokens = if var_arg.is_some() && param_count > id_count {
+                param_tokens.pop()
+            } else {
+                None
+            };
+
+            let mut param_map: HashMap<usize, Vec<CToken>> =
+                param_ids.iter().copied().zip(param_tokens).collect();
+            if param_count < id_count {
+                // TODO: Error about parameter not provided.
+                for id in &param_ids[param_count..id_count] {
+                    param_map.insert(*id, Vec::new());
+                }
+            }
+
+            match (var_arg, var_arg_tokens) {
+                (Some(id), Some(tokens)) => {
+                    param_map.insert(id, tokens);
+                },
+                (Some(id), None) => {
+                    param_map.insert(id, Vec::new());
+                },
+                (None, Some(_)) => {
+                    // TODO: Warn about excess parameters.
+                },
+                (None, None) => {},
+            }
+
+            self.create_func_macro_frame(file_id, index, end, macro_id, param_map);
+        } else {
+            panic!("Can't handle a function macro on a non-function macro.");
+        }
+    }
+
+    fn create_func_macro_frame(
+        &mut self,
+        file_id: FileId,
+        index: usize,
+        end: usize,
+        macro_id: usize,
+        params: HashMap<usize, Vec<CToken>>,
+    ) {
+        // By assuming each parameter will show up at least once, we get a good initial capacity estimation.
+        let sum_parameter_lengths = params.iter().fold(0, |accum, value| accum + value.1.len());
+
+        // This frame is to read the tokens in a function macro.
+        self.frames.push_front(Frame::TokenCollector {
+            file_id,
+            index,
+            // We want to include the PreEnd token to signal to
+            end: end + 1,
+            params,
+        });
+
+        let function_frame = self.frames.len();
+
+        let mut tokens = Vec::with_capacity(sum_parameter_lengths);
+        loop {
+            let head = self.head();
+            match *head.kind() {
+                PreEnd if self.frames.len() == function_frame => {
+                    break;
+                },
+                ref def if def.is_definable() && self.frames.len() == function_frame => {
+                    let param_id = def.get_definable_id();
+                    if let Some(handle) = self.frames[0].has_parameter(param_id) {
+                        self.handle_macro(handle);
+                        continue;
+                    } else {
+                        tokens.push(head.clone());
+                    }
+                },
+                ref def if def.is_definable() => {
+                    let macro_id = def.get_definable_id();
+                    if let Some(handle) = self.should_handle_macro(macro_id) {
+                        self.handle_macro(handle);
+                        continue;
+                    } else {
+                        tokens.push(head.clone());
+                    }
+                },
+                _ => tokens.push(head.clone()),
+            }
+
+            self.move_forward();
+        }
+
+        self.frames.pop_front();
+        self.frames.push_front(Frame::FuncMacro {
+            macro_id,
+            index: 0,
+            tokens: Arc::new(tokens),
+        })
+    }
+
+    fn collect_func_macro_invocation(&mut self, param_count: usize) -> Vec<Vec<CToken>> {
         let mut param_tokens = vec![Vec::new()];
         let mut paren_layers = 0usize;
+        let mut in_preprocessor = false;
         loop {
             let head = self.move_forward();
             match *head.kind() {
                 LParen => paren_layers += 1,
                 RParen => {
-                    if paren_layers == 0 {
+                    if paren_layers == 0 && !in_preprocessor {
                         break;
                     } else {
                         paren_layers -= 1;
                     }
                 },
-                Comma if paren_layers == 0 => {
+                Comma if paren_layers == 0 && !in_preprocessor => {
                     if param_tokens.len() <= param_count {
                         param_tokens.push(Vec::new());
+                        continue;
+                    }
+                },
+                _ if head.kind().is_preprocessor() => {
+                    // TODO: Print warning about preprocessors being undefined in func macro
+                    in_preprocessor = true;
+                },
+                PreEnd => {
+                    if in_preprocessor {
+                        in_preprocessor = false;
                     } else {
-                        param_tokens.last_mut().unwrap().push(head.clone());
+                        // TODO: Print error about unfinished macro
+                        break;
                     }
                 },
                 Eof => {
                     // TODO: Print error about unfinished macro
                     break;
                 },
-                _ => param_tokens.last_mut().unwrap().push(head.clone()),
+                _ => {},
             }
+
+            param_tokens.last_mut().unwrap().push(head.clone());
         }
-
-        let frame = match self.macros[&macro_id] {
-            MacroKind::FuncMacro {
-                file_id,
-                index,
-                end,
-                ref param_ids,
-                var_arg,
-            } => {
-                let id_count = param_ids.len();
-                let param_count = param_tokens.len();
-
-                let var_arg_tokens = if var_arg.is_some() && param_count > id_count {
-                    param_tokens.pop()
-                } else {
-                    None
-                };
-
-                let mut param_map: HashMap<usize, Vec<CToken>> =
-                    param_ids.iter().copied().zip(param_tokens).collect();
-                if param_count < id_count {
-                    // TODO: Error about parameter not provided.
-                    for id in &param_ids[param_count..id_count] {
-                        param_map.insert(*id, Vec::new());
-                    }
-                }
-
-                match (var_arg, var_arg_tokens) {
-                    (Some(id), Some(tokens)) => {
-                        param_map.insert(id, tokens);
-                    },
-                    (Some(id), None) => {
-                        param_map.insert(id, Vec::new());
-                    },
-                    (None, Some(_)) => {
-                        // TODO: Warn about excess parameters.
-                    },
-                    (None, None) => {},
-                }
-
-                Frame::FuncMacro {
-                    file_id,
-                    index,
-                    end,
-                    macro_id,
-                    params: param_map,
-                }
-            },
-            _ => panic!("Can't handle a function macro on a non-function macro."),
-        };
-
-        self.frames.push_front(frame);
+        param_tokens
     }
     /// Returns whether the given macro_id is in the frame stack.
     fn in_macro(&self, macro_id: usize) -> bool {

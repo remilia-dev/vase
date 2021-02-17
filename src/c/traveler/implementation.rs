@@ -16,18 +16,27 @@ use crate::{
         CTokenStack,
     },
     sync::Arc,
+    util::{
+        CachedString,
+        StringBuilder,
+    },
 };
 
 pub struct CTraveler {
     env: Arc<CCompileEnv>,
     frames: FrameStack,
+    str_builder: StringBuilder,
 }
 
 impl CTraveler {
     pub fn new(env: Arc<CCompileEnv>) -> CTraveler {
         let frames = FrameStack::new(env.clone());
         // OPTIMIZATION: A different hasher may be more performant
-        CTraveler { env, frames }
+        CTraveler {
+            env,
+            frames,
+            str_builder: StringBuilder::new(),
+        }
     }
 
     pub fn load_start(&mut self, tokens: Arc<CTokenStack>) {
@@ -127,9 +136,10 @@ impl CTraveler {
     }
 
     fn handle_joiner(&mut self) {
+        self.str_builder.clear();
         let first_token = self.head().clone();
         self.frames.move_forward();
-        let second_token = self.move_forward().clone();
+        let second_token = self.frames.move_forward().clone();
 
         #[allow(clippy::pattern_type_mismatch)]
         let joined = match (first_token.kind(), second_token.kind()) {
@@ -139,24 +149,27 @@ impl CTraveler {
             (Percent, RAngle) => RBrace { alt: true },
             (Amp, Equal) => AmpEqual,
             (Amp, Amp) => AmpAmp,
-            (Minus, LAngle) => Arrow,
+            (Minus, RAngle) => Arrow,
             (Bang, Equal) => BangEqual,
             (Bar, Equal) => BarEqual,
             (Bar, Bar) => BarBar,
             (Carrot, Equal) => CarrotEqual,
             (Equal, Equal) => EqualEqual,
             (Percent, Colon) => Hash { alt: true },
-            (Hash { .. }, Hash { .. }) => HashHash { alt: false },
+            (Hash { alt: false }, Hash { alt: false }) => HashHash { alt: false },
+            (Hash { alt: true }, Hash { alt: true }) => HashHash { alt: true },
             (Minus, Equal) => MinusEqual,
             (Minus, Minus) => MinusMinus,
             (LAngle, Equal) => LAngleEqual,
             (LAngle, LAngle) => LShift,
+            (LAngle, LAngleEqual) => LShiftEqual,
             (LShift, Equal) => LShiftEqual,
             (Percent, Equal) => PercentEqual,
             (Plus, Equal) => PlusEqual,
             (Plus, Plus) => PlusPlus,
             (RAngle, Equal) => RAngleEqual,
             (RAngle, RAngle) => RShift,
+            (RAngle, RAngleEqual) => RShiftEqual,
             (RShift, Equal) => RShiftEqual,
             (Slash, Equal) => SlashEqual,
             (Star, Equal) => StarEqual,
@@ -181,20 +194,31 @@ impl CTraveler {
                     unimplemented!()
                 }
             },
-            (Number(num1), Number(num2)) | (Number(num1), Identifier(num2)) => {
-                let mut num_combined = std::string::String::with_capacity(num1.len() + num2.len());
-                num_combined.push_str(num1.string());
-                num_combined.push_str(num2.string());
-                let cached = self.env.cache().get_or_cache(num_combined.as_str());
+            (Number(num1), Number(num2) | Identifier(num2)) => {
+                let cached = self.join_and_cache(num1.string(), num2.string());
                 Number(cached)
             },
+            (Number(num), Plus | Minus) => {
+                match num.string().as_bytes().last() {
+                    Some(b'e' | b'E' | b'p' | b'P') => {
+                        let cached = self.join_and_cache(
+                            num.string(),
+                            if matches!(*second_token.kind(), Plus) {
+                                "+"
+                            } else {
+                                "-"
+                            },
+                        );
+                        Number(cached)
+                    },
+                    _ => {
+                        // TODO: Error about invalid token.
+                        return;
+                    },
+                }
+            },
             (id1, id2) if id1.is_id_joinable() && id2.is_id_joinable() => {
-                let id1 = id1.get_id_join_text();
-                let id2 = id2.get_id_join_text();
-                let mut id_combined = std::string::String::with_capacity(id1.len() + id2.len());
-                id_combined.push_str(id1);
-                id_combined.push_str(id2);
-                let cached = self.env.cache().get_or_cache(id_combined.as_str());
+                let cached = self.join_and_cache(id1.get_id_join_text(), id2.get_id_join_text());
                 if let Some(keyword) = self.env.cached_to_keywords().get(&cached) {
                     Keyword(*keyword, cached.uniq_id())
                 } else {
@@ -211,6 +235,14 @@ impl CTraveler {
         let joined_token = CToken::new_unknown(joined);
 
         self.frames.push_token(joined_token);
+    }
+
+    fn join_and_cache(&mut self, s1: &str, s2: &str) -> CachedString {
+        self.str_builder.clear();
+        self.str_builder.reserve(s1.len() + s2.len());
+        self.str_builder.append_str(s1);
+        self.str_builder.append_str(s2);
+        self.env.cache().get_or_cache(self.str_builder.current())
     }
 
     fn handle_if(&mut self, _link: usize) {
@@ -287,11 +319,13 @@ impl CTraveler {
                 ref token if token.is_definable() => params.push(token.get_definable_id()),
                 DotDotDot => {
                     var_arg = Some(self.env.cache().get_or_cache("__VA_ARGS__").uniq_id());
+                    self.move_forward();
                     break;
                 },
                 RParen => break,
                 _ => {
                     // TODO: Report token not valid in func macro params
+                    eprintln!("Invalid token in function macro parameters.");
                     self.skip_past_preprocessor();
                     return;
                 },
@@ -301,6 +335,7 @@ impl CTraveler {
                 Comma => continue,
                 DotDotDot => {
                     var_arg = Some(params.pop().unwrap());
+                    self.move_forward();
                     break;
                 },
                 RParen => break,

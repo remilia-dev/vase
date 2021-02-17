@@ -4,8 +4,11 @@
 // Following features allow some unsafe to be removed in StringCache
 #![feature(maybe_uninit_array_assume_init)]
 #![feature(maybe_uninit_uninit_array)]
+// Allows for some cleaner match code
+#![feature(or_patterns)]
 // The following warnings have been added since they work with the project and have good justifications.
 #![warn(clippy::cognitive_complexity)]
+#![warn(clippy::dbg_macro)]
 #![warn(clippy::explicit_iter_loop)]
 #![warn(clippy::get_unwrap)]
 #![warn(clippy::match_wildcard_for_single_variants)]
