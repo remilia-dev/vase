@@ -3,6 +3,7 @@
 pub use vase_macros::enum_with_properties;
 
 pub use char_ext::*;
+pub use ptr_equality::PtrEquality;
 pub use string_builder::StringBuilder;
 pub use string_cache::{
     CachedString,
@@ -13,5 +14,6 @@ pub use string_cache::{
 pub mod mem;
 
 mod char_ext;
+mod ptr_equality;
 mod string_builder;
 mod string_cache;
