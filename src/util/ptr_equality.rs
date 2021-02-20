@@ -1,3 +1,5 @@
+// Copyright 2021. remilia-dev
+// This source code is licensed under GPLv3 or any later version.
 use std::{
     fmt,
     ops::Deref,
@@ -18,27 +20,19 @@ impl<T> PtrEquality<T> {
     /// Creates a new PtrEquality with the given data inside.
     /// This is only useful if T is an Arc/Rc/Box.
     pub fn new(data: T) -> Self {
-        PtrEquality {
-            data,
-        }
+        PtrEquality { data }
     }
     /// Creates a new PtrEquality with a new Arc to the given data.
     pub fn new_arc(data: T) -> PtrEquality<Arc<T>> {
-        PtrEquality {
-            data: Arc::new(data),
-        }
+        PtrEquality { data: Arc::new(data) }
     }
     /// Creates a new PtrEquality with a new Rc to the given data.
     pub fn new_rc(data: T) -> PtrEquality<Rc<T>> {
-        PtrEquality {
-            data: Rc::new(data),
-        }
+        PtrEquality { data: Rc::new(data) }
     }
     /// Creates a new PtrEquality with a new Box to the given data.
     pub fn new_box(data: T) -> PtrEquality<Box<T>> {
-        PtrEquality {
-            data: Box::new(data),
-        }
+        PtrEquality { data: Box::new(data) }
     }
 }
 

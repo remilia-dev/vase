@@ -27,7 +27,8 @@ use syn::{
 ///
 /// # Example
 /// ```
-/// vase_macros::enum_with_properties! {
+/// # use vase_macros::enum_with_properties;
+/// enum_with_properties! {
 ///     fn name(&self) -> &'static str {}
 ///     fn region_code(&self) -> u32 {}
 ///
