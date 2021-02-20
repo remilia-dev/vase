@@ -9,6 +9,7 @@ edition = "2018"
 publish = false
 
 [dependencies]
+codespan-reporting = "0.11.0"
 memmap2 = "0.2.0"
 parking_lot = "0.11.1"
 rayon = "1.5"
