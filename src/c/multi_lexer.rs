@@ -53,20 +53,13 @@ impl CMultiLexer {
         {
             let tl_lexer = thread_local::ThreadLocal::new();
             work_queue.work(&|tuple_args| {
-                let (to_lex, slot) = tuple_args;
+                let (to_lex, file_id) = tuple_args;
 
                 let mut lexer = tl_lexer
                     .get_or(|| RefCell::new(CLexer::new(&self.env, &include_callback)))
                     .borrow_mut();
-                match lexer.lex_file(slot, to_lex) {
-                    Ok(tokens) => {
-                        self.env.file_id_to_tokens().set(slot, Arc::new(tokens));
-                    },
-                    Err(err) => {
-                        // TODO: Save errors elsewhere.
-                        eprintln!("Error occured when lexing a file: {:?}", err);
-                    },
-                }
+                let tokens = lexer.lex_file(file_id, to_lex);
+                self.env.file_id_to_tokens().set(file_id, tokens.into());
             });
         }
     }

@@ -11,7 +11,7 @@ use crate::{
         file_reader::*,
         token::*,
         CCompileEnv,
-        CError,
+        CLexerError,
         CTokenStack,
         FileId,
     },
@@ -60,48 +60,53 @@ impl<'a> CLexer<'a> {
         }
     }
 
-    pub fn lex_file(
-        &mut self,
-        file_id: FileId,
-        file_path: Arc<Path>,
-    ) -> Result<CTokenStack, CError> {
+    /// Lexes the file at the given path and produces a stack of all the tokens.
+    /// # Errors
+    /// Only *fatal* lexer errors are returned. Other errors (such as improperly ended strings)
+    /// are reported using a [LexerError](CTokenKind::LexerError) token.
+    pub fn lex_file(&mut self, file_id: FileId, file_path: Arc<Path>) -> CTokenStack {
         // The scope is here to free file resources early.
         {
             let file = match File::open(&file_path) {
-                Err(err) => return Err(CError::IoError(Arc::new(err))),
+                Err(err) => {
+                    let error = CLexerError::Io(err.into());
+                    return CTokenStack::new_error(file_id, Some(file_path), error);
+                },
                 Ok(f) => f,
             };
 
             if file.metadata().unwrap().len() == 0 {
                 // Can't memory map a 0-byte file.
-                let mut stack = CTokenStack::new(file_id, &Some(file_path));
-                stack.append(CToken::new(0, 0, 0, false, CTokenKind::Eof));
-                return Ok(stack);
+                return CTokenStack::new_empty(file_id, Some(file_path));
             }
 
             // OPTIMIZATION: Would getting away from memory mapping be faster?
             // TODO: Lock the file that is being mapped. This would prevent the memory map from changing under us.
             // It would also allow this to be truly safe.
             let mmap = match unsafe { memmap2::MmapOptions::new().map(&file) } {
-                Err(err) => return Err(CError::IoError(Arc::new(err))),
+                Err(err) => {
+                    let error = CLexerError::Io(err.into());
+                    return CTokenStack::new_error(file_id, Some(file_path), error);
+                },
                 Ok(m) => m,
             };
 
             if let Some(err) = self.reader.load_bytes(&mmap) {
-                return Err(CError::Utf8DecodeError(err));
+                let error = CLexerError::Utf8Decode(err);
+                return CTokenStack::new_error(file_id, Some(file_path), error);
             }
         }
 
         self.loaded_path = Some(file_path);
-        Ok(self.lex(file_id))
+        self.lex(file_id)
     }
 
-    pub fn lex_bytes(&mut self, file_id: FileId, bytes: &[u8]) -> Result<CTokenStack, CError> {
+    pub fn lex_bytes(&mut self, file_id: FileId, bytes: &[u8]) -> CTokenStack {
         if let Some(err) = self.reader.load_bytes(bytes) {
-            return Result::Err(CError::Utf8DecodeError(err));
+            return CTokenStack::new_error(file_id, None, CLexerError::Utf8Decode(err));
         }
         self.loaded_path = None;
-        Ok(self.lex(file_id))
+        self.lex(file_id)
     }
 
     #[must_use]
@@ -110,13 +115,11 @@ impl<'a> CLexer<'a> {
         self.mode = CLexerMode::Normal;
         self.str_builder.clear();
 
-        let mut tokens = CTokenStack::new(file_id, &self.loaded_path);
         if self.reader.is_empty() {
-            tokens.append(CToken::new(0, 0, 0, false, CTokenKind::Eof));
-            tokens.finalize();
-            return tokens;
+            return CTokenStack::new_empty(file_id, self.loaded_path.take());
         }
 
+        let mut tokens = CTokenStack::new(file_id, self.loaded_path.clone());
         let mut have_skipped_whitespace = false;
         loop {
             have_skipped_whitespace |= self.reader.skip_most_whitespace();
@@ -131,11 +134,11 @@ impl<'a> CLexer<'a> {
 
             let kind = match character {
                 '/' if self.reader.move_forward_if_next('/') => {
-                    self.lex_comment(false);
+                    self.lex_comment(&mut tokens, false);
                     continue;
                 },
                 '/' if self.reader.move_forward_if_next('*') => {
-                    self.lex_comment(true);
+                    self.lex_comment(&mut tokens, true);
                     have_skipped_whitespace = true;
                     continue;
                 },
@@ -148,11 +151,11 @@ impl<'a> CLexer<'a> {
                 '"' | '<' if matches!(self.mode, CLexerMode::Include { .. }) => {
                     self.lex_include(&mut tokens, character)
                 },
-                '\'' | '"' => self.lex_string(CStringType::Default, character),
+                '\'' | '"' => self.lex_string(&mut tokens, CStringType::Default, character == '\''),
                 c if matches!(self.mode, CLexerMode::Message) => self.lex_message(c),
                 c if r"~!@#%^&*()[]{}-+=:;\|,.<>/?".contains(c) => self.lex_symbol(&mut tokens, c),
                 c if c.is_ascii_digit() => self.lex_number(false, c),
-                c => self.lex_identifier(c),
+                c => self.lex_identifier(&mut tokens, c),
             };
 
             let length = u16::try_from(self.reader.get_and_clear_length()).unwrap_or(u16::MAX);
@@ -372,8 +375,7 @@ impl<'a> CLexer<'a> {
             match self.link_stack.pop() {
                 Some(index) => tokens[index].kind_mut().set_link(curr_index),
                 None => {
-                    // TODO: Error about not-properly ended linking preprocessor
-                    println!("TODO: Warn about not-properly ended linking preprocessor");
+                    tokens.add_error_token(CLexerError::MissingCorrespondingIf);
                 },
             }
         }
@@ -416,8 +418,7 @@ impl<'a> CLexer<'a> {
         }
 
         if !correctly_ended {
-            // TODO: Communicate the warning
-            println!("TODO: Include path was not properly ended.");
+            tokens.add_error_token(CLexerError::UnendedInclude);
         }
 
         if let CLexerMode::Include { next } = self.mode {
@@ -447,7 +448,13 @@ impl<'a> CLexer<'a> {
         CTokenKind::Message(Arc::new(self.str_builder.current_as_box()))
     }
 
-    fn lex_string(&mut self, str_type: CStringType, opening_char: char) -> CTokenKind {
+    fn lex_string(
+        &mut self,
+        tokens: &mut CTokenStack,
+        str_type: CStringType,
+        is_char: bool,
+    ) -> CTokenKind {
+        let opening_char = if is_char { '\'' } else { '"' };
         self.str_builder.clear();
 
         let mut ended_correctly = false;
@@ -488,15 +495,14 @@ impl<'a> CLexer<'a> {
         }
 
         if !ended_correctly {
-            // TODO: Communicate the warning
-            println!("TODO: Missing end character for string.");
+            tokens.add_error_token(CLexerError::UnendedString);
         }
 
         CTokenKind::String {
             str_data: Arc::new(self.str_builder.current_as_box()),
             str_type,
             has_complex_escapes,
-            is_char: opening_char == '\'',
+            is_char,
         }
     }
 
@@ -529,7 +535,7 @@ impl<'a> CLexer<'a> {
         CTokenKind::Number(num_data)
     }
 
-    fn lex_identifier(&mut self, first_char: char) -> CTokenKind {
+    fn lex_identifier(&mut self, tokens: &mut CTokenStack, first_char: char) -> CTokenKind {
         let cached = self.read_cached_identifier(first_char);
 
         if let Some(keyword) = self.env.cached_to_keywords().get(&cached) {
@@ -539,7 +545,7 @@ impl<'a> CLexer<'a> {
         if let Some(str_type) = self.env.cached_to_str_prefix().get(&cached).cloned() {
             let front_char = self.reader.front().unwrap_or('\0');
             if front_char == '"' || front_char == '\'' {
-                return self.lex_string(str_type, front_char);
+                return self.lex_string(tokens, str_type, front_char == '\'');
             }
         }
 
@@ -573,14 +579,13 @@ impl<'a> CLexer<'a> {
         return self.env.cache().get_or_cache(identifier);
     }
 
-    fn lex_comment(&mut self, multi_line: bool) {
+    fn lex_comment(&mut self, tokens: &mut CTokenStack, multi_line: bool) {
         loop {
             let char = match self.reader.move_forward() {
                 Some(cl) => cl,
                 None => {
                     if multi_line {
-                        // TODO: Communicate the warning
-                        println!("TODO: End-of-file hit before the end of multi-line comment.");
+                        tokens.add_error_token(CLexerError::UnendedComment);
                     }
                     return;
                 },

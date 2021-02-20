@@ -28,16 +28,16 @@ fn run_test(env: Arc<CCompileEnv>, sources: &[&str], expected: &[CTokenKind]) {
     }
 
     let mut lexer = CLexer::new(&env, &|_, _, _| Some(1));
-    for i in 0..sources.len() {
-        let tokens = lexer.lex_bytes(i as u32, sources[i].as_bytes()).unwrap();
+    for (i, source) in sources.iter().enumerate() {
+        let tokens = lexer.lex_bytes(i as u32, source.as_bytes());
         env.file_id_to_tokens().push(Arc::new(tokens));
     }
 
     let mut traveler = CTraveler::new(env.clone());
     traveler.load_start(env.file_id_to_tokens()[0].clone());
 
-    for i in 0..expected.len() {
-        assert_eq!(traveler.head().kind(), &expected[i]);
+    for expected_token in expected.iter() {
+        assert_eq!(traveler.head().kind(), expected_token);
         traveler.move_forward();
     }
 

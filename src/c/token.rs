@@ -41,6 +41,16 @@ impl CToken {
         }
     }
 
+    pub fn new_first_byte(file_id: FileId, kind: CTokenKind) -> CToken {
+        CToken {
+            file_id,
+            byte: 0,
+            byte_length: 0,
+            whitespace_before: false,
+            kind,
+        }
+    }
+
     pub fn file_id(&self) -> FileId {
         self.file_id
     }
@@ -79,6 +89,7 @@ pub enum CTokenKind {
         is_char: bool,
         str_data: Arc<Box<str>>,
     },
+    LexerError(usize),
     Eof,
 
     // == Begin Preprocessors
