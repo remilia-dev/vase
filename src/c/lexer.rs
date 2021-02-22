@@ -334,8 +334,8 @@ impl<'a> LexerState<'a> {
                 Some(index) => self.tokens[index].kind_mut().set_link(curr_index),
                 None => {
                     let location = self.source_location();
-                    self.tokens
-                        .add_error_token(location, CLexerError::MissingCorrespondingIf);
+                    let error = CLexerError::MissingCorrespondingIf(location.clone());
+                    self.tokens.add_error_token(location, error);
                 },
             }
         }
@@ -379,7 +379,8 @@ impl<'a> LexerState<'a> {
 
         if !correctly_ended {
             let location = self.reader.location();
-            self.tokens.add_error_token(location, CLexerError::UnendedInclude);
+            let error = CLexerError::UnendedInclude(location.clone());
+            self.tokens.add_error_token(location, error);
         }
 
         if let CLexerMode::Include { next } = self.mode {
@@ -454,7 +455,8 @@ impl<'a> LexerState<'a> {
 
         if !ended_correctly {
             let location = self.reader.location();
-            self.tokens.add_error_token(location, CLexerError::UnendedString);
+            let error = CLexerError::UnendedString(location.clone());
+            self.tokens.add_error_token(location, error);
         }
 
         self.add_token(CTokenKind::String {
@@ -518,7 +520,8 @@ impl<'a> LexerState<'a> {
                 None => {
                     if multi_line {
                         let location = self.reader.location();
-                        self.tokens.add_error_token(location, CLexerError::UnendedComment);
+                        let error = CLexerError::UnendedComment(location.clone());
+                        self.tokens.add_error_token(location, error);
                     }
                     return;
                 },

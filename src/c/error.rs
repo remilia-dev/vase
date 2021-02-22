@@ -26,14 +26,14 @@ enum_with_properties! {
         Io(PtrEquality<Arc<std::io::Error>>),
         // == Errors
         #[values(Error, "LE300")]
-        MissingCorrespondingIf,
+        MissingCorrespondingIf(SourceLocation),
         #[values(Error, "LE301")]
-        MissingCorrespondingEndIf,
+        MissingCorrespondingEndIf(SourceLocation),
         #[values(Error, "LE310")]
-        UnendedComment,
+        UnendedComment(SourceLocation),
         #[values(Error, "LE311")]
-        UnendedInclude,
+        UnendedInclude(SourceLocation),
         #[values(Error, "LE312")]
-        UnendedString,
+        UnendedString(SourceLocation),
     }
 }
