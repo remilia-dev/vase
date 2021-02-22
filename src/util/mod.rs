@@ -7,6 +7,10 @@ pub use char_ext::{
 };
 pub use ptr_equality::PtrEquality;
 pub use severity::Severity;
+pub use source_location::{
+    FileId,
+    SourceLocation,
+};
 pub use string_builder::StringBuilder;
 pub use string_cache::{
     CachedString,
@@ -20,5 +24,6 @@ pub mod mem;
 mod char_ext;
 mod ptr_equality;
 mod severity;
+mod source_location;
 mod string_builder;
 mod string_cache;
