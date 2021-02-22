@@ -9,16 +9,16 @@ use crate::util::{
     Utf8DecodeError,
 };
 
-pub struct CFileReader {
+pub struct FileReader {
     line_chars: Vec<CharLocation>,
     position: usize,
     file_id: FileId,
     last_byte: u32,
 }
 
-impl CFileReader {
+impl FileReader {
     pub fn new() -> Self {
-        CFileReader {
+        FileReader {
             line_chars: Vec::with_capacity(1000),
             position: 0,
             file_id: FileId::MAX,
@@ -151,9 +151,9 @@ impl CFileReader {
     }
 }
 
-impl Default for CFileReader {
+impl Default for FileReader {
     fn default() -> Self {
-        CFileReader::new()
+        FileReader::new()
     }
 }
 

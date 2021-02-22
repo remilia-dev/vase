@@ -7,12 +7,12 @@ use unicode_normalization::UnicodeNormalization;
 
 use crate::{
     c::{
-        file_reader::*,
         token::*,
-        CCompileEnv,
-        CLexerError,
-        CTokenStack,
+        CompileEnv,
         FileId,
+        FileReader,
+        FileTokens,
+        LexerError,
     },
     sync::Arc,
     util::{
@@ -22,23 +22,23 @@ use crate::{
     },
 };
 
-pub type CIncludeCallback<'a> =
-    &'a (dyn Send + Sync + Fn(CIncludeType, &CachedString, &Option<Arc<Path>>) -> Option<FileId>);
+pub type IncludeCallback<'a> =
+    &'a (dyn Send + Sync + Fn(IncludeType, &CachedString, &Option<Arc<Path>>) -> Option<FileId>);
 
-pub struct CLexer<'a> {
-    env: &'a CCompileEnv,
-    include_callback: CIncludeCallback<'a>,
-    reader: CFileReader,
+pub struct Lexer<'a> {
+    env: &'a CompileEnv,
+    include_callback: IncludeCallback<'a>,
+    reader: FileReader,
     str_builder: StringBuilder,
     norm_buffer: StringBuilder,
     link_stack: Vec<usize>,
 }
-impl<'a> CLexer<'a> {
-    pub fn new(env: &'a CCompileEnv, include_callback: CIncludeCallback<'a>) -> CLexer<'a> {
-        CLexer {
+impl<'a> Lexer<'a> {
+    pub fn new(env: &'a CompileEnv, include_callback: IncludeCallback<'a>) -> Lexer<'a> {
+        Lexer {
             env,
             include_callback,
-            reader: CFileReader::new(),
+            reader: FileReader::new(),
             str_builder: StringBuilder::with_capacity(30),
             norm_buffer: StringBuilder::with_capacity(30),
             link_stack: Vec::with_capacity(5),
@@ -49,20 +49,20 @@ impl<'a> CLexer<'a> {
     /// # Errors
     /// Only *fatal* lexer errors are returned. Other errors (such as improperly ended strings)
     /// are reported using a [LexerError](CTokenKind::LexerError) token.
-    pub fn lex_file(&mut self, file_id: FileId, file_path: Arc<Path>) -> CTokenStack {
+    pub fn lex_file(&mut self, file_id: FileId, file_path: Arc<Path>) -> FileTokens {
         // The scope is here to free file resources early.
         {
             let file = match File::open(&file_path) {
                 Err(err) => {
-                    let error = CLexerError::Io(err.into());
-                    return CTokenStack::new_error(file_id, Some(file_path), error);
+                    let error = LexerError::Io(err.into());
+                    return FileTokens::new_error(file_id, Some(file_path), error);
                 },
                 Ok(f) => f,
             };
 
             if file.metadata().unwrap().len() == 0 {
                 // Can't memory map a 0-byte file.
-                return CTokenStack::new_empty(file_id, Some(file_path));
+                return FileTokens::new_empty(file_id, Some(file_path));
             }
 
             // OPTIMIZATION: Would getting away from memory mapping be faster?
@@ -70,29 +70,29 @@ impl<'a> CLexer<'a> {
             // It would also allow this to be truly safe.
             let mmap = match unsafe { memmap2::MmapOptions::new().map(&file) } {
                 Err(err) => {
-                    let error = CLexerError::Io(err.into());
-                    return CTokenStack::new_error(file_id, Some(file_path), error);
+                    let error = LexerError::Io(err.into());
+                    return FileTokens::new_error(file_id, Some(file_path), error);
                 },
                 Ok(m) => m,
             };
 
             if let Some(err) = self.reader.load_bytes(file_id, &mmap) {
-                let error = CLexerError::Utf8Decode(err);
-                return CTokenStack::new_error(file_id, Some(file_path), error);
+                let error = LexerError::Utf8Decode(err);
+                return FileTokens::new_error(file_id, Some(file_path), error);
             }
         }
 
         self.lex(file_id, Some(file_path))
     }
 
-    pub fn lex_bytes(&mut self, file_id: FileId, bytes: &[u8]) -> CTokenStack {
+    pub fn lex_bytes(&mut self, file_id: FileId, bytes: &[u8]) -> FileTokens {
         if let Some(err) = self.reader.load_bytes(file_id, bytes) {
-            return CTokenStack::new_error(file_id, None, CLexerError::Utf8Decode(err));
+            return FileTokens::new_error(file_id, None, LexerError::Utf8Decode(err));
         }
         self.lex(file_id, None)
     }
 
-    fn lex(&mut self, file_id: FileId, path: Option<Arc<Path>>) -> CTokenStack {
+    fn lex(&mut self, file_id: FileId, path: Option<Arc<Path>>) -> FileTokens {
         LexerState::create_and_lex(file_id, path, self)
     }
 }
@@ -111,10 +111,10 @@ struct LexerState<'a> {
     at_start_of_line: bool,
     have_skipped_whitespace: bool,
     start_location: SourceLocation,
-    tokens: CTokenStack,
-    env: &'a CCompileEnv,
-    include_callback: CIncludeCallback<'a>,
-    reader: &'a mut CFileReader,
+    tokens: FileTokens,
+    env: &'a CompileEnv,
+    include_callback: IncludeCallback<'a>,
+    reader: &'a mut FileReader,
     str_builder: &'a mut StringBuilder,
     norm_buffer: &'a mut StringBuilder,
     link_stack: &'a mut Vec<usize>,
@@ -124,14 +124,14 @@ impl<'a> LexerState<'a> {
     fn create_and_lex(
         file_id: FileId,
         path: Option<Arc<Path>>,
-        shared_data: &'a mut CLexer,
-    ) -> CTokenStack {
+        shared_data: &'a mut Lexer,
+    ) -> FileTokens {
         LexerState {
             mode: CLexerMode::Normal,
             at_start_of_line: true,
             have_skipped_whitespace: false,
             start_location: SourceLocation::new_first_byte(file_id),
-            tokens: CTokenStack::new(file_id, path),
+            tokens: FileTokens::new(file_id, path),
             env: shared_data.env,
             include_callback: shared_data.include_callback,
             reader: &mut shared_data.reader,
@@ -143,7 +143,7 @@ impl<'a> LexerState<'a> {
     }
 
     #[must_use]
-    fn lex(mut self) -> CTokenStack {
+    fn lex(mut self) -> FileTokens {
         loop {
             self.have_skipped_whitespace |= self.reader.skip_most_whitespace();
 
@@ -164,18 +164,15 @@ impl<'a> LexerState<'a> {
                 '"' | '<' if matches!(self.mode, CLexerMode::Include { .. }) => {
                     self.lex_include(character)
                 },
-                '\'' | '"' => self.lex_string(CStringType::Default, character == '\''),
+                '\'' | '"' => self.lex_string(StringType::Default, character == '\''),
                 c if r"~!@#%^&*()[]{}-+=:;\|,.<>/?".contains(c) => self.lex_symbol(c),
                 c if c.is_ascii_digit() => self.lex_number(false, c),
                 c => self.lex_identifier(c),
             };
         }
 
-        self.tokens.append(CToken::new(
-            self.reader.location(),
-            false,
-            CTokenKind::Eof,
-        ));
+        let eof_token = Token::new(self.reader.location(), false, TokenKind::Eof);
+        self.tokens.append(eof_token);
 
         self.tokens.finalize();
         self.tokens
@@ -190,109 +187,109 @@ impl<'a> LexerState<'a> {
         // signals whether a move forward is required (true) or not (false).
         let (move_forward, kind) = match first_char {
             // TODO: Add double [[ and ]] support for C2X attributes
-            '[' => (true, CTokenKind::LBracket { alt: false }),
-            ']' => (true, CTokenKind::RBracket { alt: false }),
-            '(' => (true, CTokenKind::LParen),
-            ')' => (true, CTokenKind::RParen),
-            '{' => (true, CTokenKind::LBrace { alt: false }),
-            '}' => (true, CTokenKind::RBrace { alt: false }),
+            '[' => (true, TokenKind::LBracket { alt: false }),
+            ']' => (true, TokenKind::RBracket { alt: false }),
+            '(' => (true, TokenKind::LParen),
+            ')' => (true, TokenKind::RParen),
+            '{' => (true, TokenKind::LBrace { alt: false }),
+            '}' => (true, TokenKind::RBrace { alt: false }),
             '.' => match self.reader.move_forward() {
                 Some('.') => {
                     if self.reader.move_forward_if_next('.') {
                         self.reader.move_forward();
-                        (false, CTokenKind::DotDotDot)
+                        (false, TokenKind::DotDotDot)
                     } else {
-                        (false, CTokenKind::Dot)
+                        (false, TokenKind::Dot)
                     }
                 },
                 Some(c) if c.is_ascii_digit() => return self.lex_number(true, c),
-                _ => (false, CTokenKind::Dot),
+                _ => (false, TokenKind::Dot),
             },
             '&' => match self.reader.move_forward() {
-                Some('=') => (true, CTokenKind::AmpEqual),
-                Some('&') => (true, CTokenKind::AmpAmp),
-                _ => (false, CTokenKind::Amp),
+                Some('=') => (true, TokenKind::AmpEqual),
+                Some('&') => (true, TokenKind::AmpAmp),
+                _ => (false, TokenKind::Amp),
             },
             '*' => match self.reader.move_forward() {
-                Some('=') => (true, CTokenKind::StarEqual),
-                _ => (false, CTokenKind::Star),
+                Some('=') => (true, TokenKind::StarEqual),
+                _ => (false, TokenKind::Star),
             },
             '+' => match self.reader.move_forward() {
-                Some('=') => (true, CTokenKind::PlusEqual),
-                Some('+') => (true, CTokenKind::PlusPlus),
-                _ => (false, CTokenKind::Plus),
+                Some('=') => (true, TokenKind::PlusEqual),
+                Some('+') => (true, TokenKind::PlusPlus),
+                _ => (false, TokenKind::Plus),
             },
             '-' => match self.reader.move_forward() {
-                Some('=') => (true, CTokenKind::MinusEqual),
-                Some('-') => (true, CTokenKind::MinusMinus),
-                Some('>') => (true, CTokenKind::Arrow),
-                _ => (false, CTokenKind::Minus),
+                Some('=') => (true, TokenKind::MinusEqual),
+                Some('-') => (true, TokenKind::MinusMinus),
+                Some('>') => (true, TokenKind::Arrow),
+                _ => (false, TokenKind::Minus),
             },
-            '~' => (true, CTokenKind::Tilde),
+            '~' => (true, TokenKind::Tilde),
             '!' => match self.reader.move_forward() {
-                Some('=') => (true, CTokenKind::BangEqual),
-                _ => (false, CTokenKind::Bang),
+                Some('=') => (true, TokenKind::BangEqual),
+                _ => (false, TokenKind::Bang),
             },
             '/' => match self.reader.move_forward() {
-                Some('=') => (true, CTokenKind::SlashEqual),
+                Some('=') => (true, TokenKind::SlashEqual),
                 // NOTE: Comments should have been handled in the main match in self.lex
-                _ => (false, CTokenKind::Slash),
+                _ => (false, TokenKind::Slash),
             },
             '%' => match self.reader.move_forward() {
-                Some('=') => (true, CTokenKind::PercentEqual),
-                Some('>') => (true, CTokenKind::RBrace { alt: true }),
+                Some('=') => (true, TokenKind::PercentEqual),
+                Some('>') => (true, TokenKind::RBrace { alt: true }),
                 Some(':') => match self.reader.move_forward() {
                     Some('%') if self.reader.move_forward_if_next(':') => {
-                        (true, CTokenKind::HashHash { alt: true })
+                        (true, TokenKind::HashHash { alt: true })
                     },
                     _ => return self.lex_preprocessor(true),
                 },
-                _ => (false, CTokenKind::Percent),
+                _ => (false, TokenKind::Percent),
             },
             '<' => match self.reader.move_forward() {
-                Some('=') => (true, CTokenKind::LAngleEqual),
+                Some('=') => (true, TokenKind::LAngleEqual),
                 Some('<') => match self.reader.move_forward() {
-                    Some('=') => (true, CTokenKind::LShiftEqual),
-                    _ => (false, CTokenKind::LShift),
+                    Some('=') => (true, TokenKind::LShiftEqual),
+                    _ => (false, TokenKind::LShift),
                 },
-                Some('%') => (true, CTokenKind::LBrace { alt: true }),
-                Some(':') => (true, CTokenKind::LBracket { alt: true }),
-                _ => (false, CTokenKind::LAngle),
+                Some('%') => (true, TokenKind::LBrace { alt: true }),
+                Some(':') => (true, TokenKind::LBracket { alt: true }),
+                _ => (false, TokenKind::LAngle),
             },
             '>' => match self.reader.move_forward() {
                 Some('>') => match self.reader.move_forward() {
-                    Some('=') => (true, CTokenKind::RShiftEqual),
-                    _ => (false, CTokenKind::RShift),
+                    Some('=') => (true, TokenKind::RShiftEqual),
+                    _ => (false, TokenKind::RShift),
                 },
-                Some('=') => (true, CTokenKind::RAngleEqual),
-                _ => (false, CTokenKind::RAngle),
+                Some('=') => (true, TokenKind::RAngleEqual),
+                _ => (false, TokenKind::RAngle),
             },
             '=' => match self.reader.move_forward() {
-                Some('=') => (true, CTokenKind::EqualEqual),
-                _ => (false, CTokenKind::Equal),
+                Some('=') => (true, TokenKind::EqualEqual),
+                _ => (false, TokenKind::Equal),
             },
             '^' => match self.reader.move_forward() {
-                Some('=') => (true, CTokenKind::CarrotEqual),
-                _ => (false, CTokenKind::Carrot),
+                Some('=') => (true, TokenKind::CarrotEqual),
+                _ => (false, TokenKind::Carrot),
             },
             '|' => match self.reader.move_forward() {
-                Some('=') => (true, CTokenKind::BarEqual),
-                Some('|') => (true, CTokenKind::BarBar),
-                _ => (false, CTokenKind::Bar),
+                Some('=') => (true, TokenKind::BarEqual),
+                Some('|') => (true, TokenKind::BarBar),
+                _ => (false, TokenKind::Bar),
             },
-            '?' => (true, CTokenKind::QMark),
+            '?' => (true, TokenKind::QMark),
             ':' => match self.reader.move_forward() {
-                Some('>') => (true, CTokenKind::RBracket { alt: true }),
-                _ => (false, CTokenKind::Colon),
+                Some('>') => (true, TokenKind::RBracket { alt: true }),
+                _ => (false, TokenKind::Colon),
             },
-            ';' => (true, CTokenKind::Semicolon),
-            ',' => (true, CTokenKind::Comma),
+            ';' => (true, TokenKind::Semicolon),
+            ',' => (true, TokenKind::Comma),
             '#' => match self.reader.move_forward() {
-                Some('#') => (true, CTokenKind::HashHash { alt: false }),
+                Some('#') => (true, TokenKind::HashHash { alt: false }),
                 _ => return self.lex_preprocessor(false),
             },
-            '@' => (true, CTokenKind::At),
-            '\\' => (true, CTokenKind::Backslash),
+            '@' => (true, TokenKind::At),
+            '\\' => (true, TokenKind::Backslash),
             _ => unreachable!(
                 "c_lex_symbol should never lex starting on the character {}.",
                 first_char
@@ -307,7 +304,7 @@ impl<'a> LexerState<'a> {
 
     fn lex_preprocessor(&mut self, alt_start: bool) {
         if self.mode == CLexerMode::Preprocessor || !self.at_start_of_line {
-            return self.add_token(CTokenKind::Hash { alt: alt_start });
+            return self.add_token(TokenKind::Hash { alt: alt_start });
         }
 
         // The # or %: should have already been passed
@@ -316,7 +313,7 @@ impl<'a> LexerState<'a> {
         let first_char = match self.reader.front() {
             Some(c) if c != '\n' => c,
             // If the EOF or a new line is next, we just want to return a blank preprocessor instruction.
-            _ => return self.add_token(CTokenKind::PreBlank),
+            _ => return self.add_token(TokenKind::PreBlank),
         };
 
         let pre_id = self.read_cached_identifier(first_char);
@@ -324,7 +321,7 @@ impl<'a> LexerState<'a> {
             Some(pre_type) => pre_type.clone(),
             None => {
                 self.mode = CLexerMode::Preprocessor;
-                return self.add_token(CTokenKind::PreUnknown(pre_id));
+                return self.add_token(TokenKind::PreUnknown(pre_id));
             },
         };
 
@@ -334,7 +331,7 @@ impl<'a> LexerState<'a> {
                 Some(index) => self.tokens[index].kind_mut().set_link(curr_index),
                 None => {
                     let location = self.source_location();
-                    let error = CLexerError::MissingCorrespondingIf(location.clone());
+                    let error = LexerError::MissingCorrespondingIf(location.clone());
                     self.tokens.add_error_token(location, error);
                 },
             }
@@ -344,9 +341,9 @@ impl<'a> LexerState<'a> {
         }
 
         self.mode = match pre_type {
-            CTokenKind::PreInclude => CLexerMode::Include { next: false },
-            CTokenKind::PreIncludeNext => CLexerMode::Include { next: true },
-            CTokenKind::PreError | CTokenKind::PreWarning => CLexerMode::Message,
+            TokenKind::PreInclude => CLexerMode::Include { next: false },
+            TokenKind::PreIncludeNext => CLexerMode::Include { next: true },
+            TokenKind::PreError | TokenKind::PreWarning => CLexerMode::Message,
             _ => CLexerMode::Preprocessor,
         };
 
@@ -355,8 +352,8 @@ impl<'a> LexerState<'a> {
 
     fn lex_include(&mut self, include_start: char) {
         let mut inc_type = match include_start {
-            '"' => CIncludeType::IncludeLocal,
-            '<' => CIncludeType::IncludeSystem,
+            '"' => IncludeType::IncludeLocal,
+            '<' => IncludeType::IncludeSystem,
             _ => panic!(
                 "lex_include should not be called starting with the character '{}'.",
                 include_start
@@ -379,13 +376,13 @@ impl<'a> LexerState<'a> {
 
         if !correctly_ended {
             let location = self.reader.location();
-            let error = CLexerError::UnendedInclude(location.clone());
+            let error = LexerError::UnendedInclude(location.clone());
             self.tokens.add_error_token(location, error);
         }
 
         if let CLexerMode::Include { next } = self.mode {
             if next {
-                inc_type = CIncludeType::IncludeNext;
+                inc_type = IncludeType::IncludeNext;
             }
         }
         let path = self.env.cache().get_or_cache(self.str_builder.current());
@@ -393,7 +390,7 @@ impl<'a> LexerState<'a> {
         let inc_id = (self.include_callback)(inc_type, &path, &self.tokens.path());
         self.tokens.add_reference(&path, inc_id);
 
-        self.add_token(CTokenKind::IncludePath { inc_type, path })
+        self.add_token(TokenKind::IncludePath { inc_type, path })
     }
 
     fn lex_message(&mut self, first_char: char) {
@@ -407,12 +404,12 @@ impl<'a> LexerState<'a> {
         }
 
         self.mode = CLexerMode::Normal;
-        self.add_token(CTokenKind::Message(
+        self.add_token(TokenKind::Message(
             self.str_builder.current_as_box().into(),
         ))
     }
 
-    fn lex_string(&mut self, str_type: CStringType, is_char: bool) {
+    fn lex_string(&mut self, str_type: StringType, is_char: bool) {
         let opening_char = if is_char { '\'' } else { '"' };
         self.str_builder.clear();
 
@@ -455,11 +452,11 @@ impl<'a> LexerState<'a> {
 
         if !ended_correctly {
             let location = self.reader.location();
-            let error = CLexerError::UnendedString(location.clone());
+            let error = LexerError::UnendedString(location.clone());
             self.tokens.add_error_token(location, error);
         }
 
-        self.add_token(CTokenKind::String {
+        self.add_token(TokenKind::String {
             str_data: Arc::new(self.str_builder.current_as_box()),
             str_type,
             has_complex_escapes,
@@ -493,14 +490,14 @@ impl<'a> LexerState<'a> {
         }
 
         let num_data = self.env.cache().get_or_cache(self.str_builder.current());
-        self.add_token(CTokenKind::Number(num_data));
+        self.add_token(TokenKind::Number(num_data));
     }
 
     fn lex_identifier(&mut self, first_char: char) {
         let cached = self.read_cached_identifier(first_char);
 
         if let Some(keyword) = self.env.cached_to_keywords().get(&cached) {
-            return self.add_token(CTokenKind::Keyword(*keyword, cached.uniq_id()));
+            return self.add_token(TokenKind::Keyword(*keyword, cached.uniq_id()));
         }
 
         if let Some(str_type) = self.env.cached_to_str_prefix().get(&cached).cloned() {
@@ -510,7 +507,7 @@ impl<'a> LexerState<'a> {
             }
         }
 
-        self.add_token(CTokenKind::Identifier(cached));
+        self.add_token(TokenKind::Identifier(cached));
     }
 
     fn lex_comment(&mut self, multi_line: bool) {
@@ -520,7 +517,7 @@ impl<'a> LexerState<'a> {
                 None => {
                     if multi_line {
                         let location = self.reader.location();
-                        let error = CLexerError::UnendedComment(location.clone());
+                        let error = LexerError::UnendedComment(location.clone());
                         self.tokens.add_error_token(location, error);
                     }
                     return;
@@ -571,10 +568,10 @@ impl<'a> LexerState<'a> {
     fn end_line(&mut self) {
         if self.mode != CLexerMode::Normal {
             self.mode = CLexerMode::Normal;
-            self.tokens.append(CToken::new(
+            self.tokens.append(Token::new(
                 self.reader.location(),
                 false,
-                CTokenKind::PreEnd,
+                TokenKind::PreEnd,
             ));
         }
         self.at_start_of_line = true;
@@ -582,9 +579,9 @@ impl<'a> LexerState<'a> {
         self.reader.move_forward();
     }
 
-    fn add_token(&mut self, kind: CTokenKind) {
+    fn add_token(&mut self, kind: TokenKind) {
         let location = self.source_location();
-        let token = CToken::new(location, self.have_skipped_whitespace, kind);
+        let token = Token::new(location, self.have_skipped_whitespace, kind);
         self.tokens.append(token);
         self.at_start_of_line = false;
         self.have_skipped_whitespace = false;

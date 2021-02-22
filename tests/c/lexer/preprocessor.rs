@@ -3,8 +3,8 @@
 use indoc::indoc;
 use vase::{
     c::{
-        CIncludeType::*,
-        CTokenKind::*,
+        IncludeType::*,
+        TokenKind::*,
     },
     sync::Arc,
 };

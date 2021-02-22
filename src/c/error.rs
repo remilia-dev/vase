@@ -4,9 +4,9 @@ use crate::{
     sync::Arc,
     util::{
         enum_with_properties,
-        CachedString,
         PtrEquality,
         Severity,
+        SourceLocation,
         Utf8DecodeError,
     },
 };
@@ -18,7 +18,7 @@ enum_with_properties! {
     pub fn code(&self) -> &'static str {}
 
     #[derive(Clone, Debug, Eq, PartialEq)]
-    pub enum CLexerError {
+    pub enum LexerError {
         // == Fatals
         #[values(Fatal, "LF400")]
         Utf8Decode(Utf8DecodeError),

@@ -12,12 +12,12 @@ use crate::{
             MacroHandle,
             MacroKind,
         },
-        CCompileEnv,
-        CToken,
-        CTokenKind,
-        CTokenKind::*,
-        CTokenStack,
+        CompileEnv,
         FileId,
+        FileTokens,
+        Token,
+        TokenKind,
+        TokenKind::*,
     },
     sync::Arc,
     util::CachedString,
@@ -28,7 +28,7 @@ use crate::{
 /// It can be loaded at any point to bring the traveler back to the save point.
 /// However, loading a state from a different traveler (or a re-used traveler) may
 /// inevitably cause panics.
-pub struct CTravelerState {
+pub struct TravelerState {
     frames: VecDeque<Frame>,
     macros: HashMap<usize, MacroKind>,
     should_chain_skip: bool,
@@ -38,9 +38,9 @@ pub struct CTravelerState {
 /// This includes reading tokens from macros and includes. It is important to note
 /// that FrameStack *never* handles preprocessor instructions (CTraveler does).
 pub(super) struct FrameStack {
-    env: Arc<CCompileEnv>,
+    env: Arc<CompileEnv>,
     /// A map from file ids to the token stacks. Token stacks are loaded into here as needed.
-    file_refs: HashMap<FileId, Arc<CTokenStack>>,
+    file_refs: HashMap<FileId, Arc<FileTokens>>,
     /// A vec-deque of frames. The frame that is currently being worked on will always be at index 0.
     frames: VecDeque<Frame>,
     /// A map from a macro's unique id to the kind of macro it is.
@@ -56,7 +56,7 @@ pub(super) struct FrameStack {
 
 impl FrameStack {
     /// Creates a new frame stack from the given compile environment.
-    pub fn new(env: Arc<CCompileEnv>) -> Self {
+    pub fn new(env: Arc<CompileEnv>) -> Self {
         // OPTIMIZATION: A different hasher may be more performant
         FrameStack {
             env,
@@ -69,7 +69,7 @@ impl FrameStack {
     /// Sets up the frame stack up to start processing the given token stack.
     ///
     /// This removes all previous macros/frames.
-    pub fn load_start(&mut self, tokens: Arc<CTokenStack>) {
+    pub fn load_start(&mut self, tokens: Arc<FileTokens>) {
         self.frames.clear();
         self.macros.clear();
         self.should_chain_skip = true;
@@ -89,9 +89,9 @@ impl FrameStack {
         self.should_chain_skip
     }
     /// Returns a saved state that can be used later to return to the current location.
-    pub fn save_state(&self) -> CTravelerState {
+    pub fn save_state(&self) -> TravelerState {
         // OPTIMIZATION: self.macros should use a COW structure to avoid unnecessary clones
-        CTravelerState {
+        TravelerState {
             frames: self.frames.clone(),
             macros: self.macros.clone(),
             should_chain_skip: self.should_chain_skip,
@@ -102,13 +102,13 @@ impl FrameStack {
     /// Panics can occur if this state is from a different frame stack or this frame stack has
     /// been reused since this state. These panics won't occur on this function call, they'll
     /// occur later in the usage of the stack.
-    pub fn load_state(&mut self, state: CTravelerState) {
+    pub fn load_state(&mut self, state: TravelerState) {
         self.frames = state.frames;
         self.macros = state.macros;
         self.should_chain_skip = state.should_chain_skip;
     }
     /// Returns a reference to the current token the frame stack is at.
-    pub fn head(&self) -> &CToken {
+    pub fn head(&self) -> &Token {
         match self.frames[0] {
             Frame::File { file_id, index, .. }
             | Frame::ObjectMacro { file_id, index, .. }
@@ -133,7 +133,7 @@ impl FrameStack {
     /// * The next token is a function parameter
     ///
     /// Most of the time when the next token is outside the current macro and `exit_macros` is false.
-    pub fn preview_next_kind(&self, exit_macros: bool) -> Option<&CTokenKind> {
+    pub fn preview_next_kind(&self, exit_macros: bool) -> Option<&TokenKind> {
         for i in 0..self.frames.len() {
             match self.frames[i] {
                 Frame::File { file_id, index, .. } => {
@@ -190,7 +190,7 @@ impl FrameStack {
     /// Moves the stack to the next token.
     ///
     /// This will remove any frames that we have reached the end of.
-    pub fn move_forward(&mut self) -> &CToken {
+    pub fn move_forward(&mut self) -> &Token {
         self.should_chain_skip = true;
         while !self.frames[0].increment_index() {
             self.frames.pop_front();
@@ -281,7 +281,7 @@ impl FrameStack {
     /// Pushes a single-token frame onto the stack.
     ///
     /// This method should only be used for token-joiner and stringification operations.
-    pub fn push_token(&mut self, token: CToken) {
+    pub fn push_token(&mut self, token: Token) {
         let frame = Frame::SingleToken { macro_id: usize::MAX, token };
         self.frames.push_front(frame);
     }
@@ -339,7 +339,7 @@ impl FrameStack {
             },
             MacroKind::FuncMacro { ref param_ids, .. } => {
                 let param_count = param_ids.len();
-                if let Some(&CTokenKind::LParen) = self.preview_next_kind(true) {
+                if let Some(&TokenKind::LParen) = self.preview_next_kind(true) {
                     Some(MacroHandle::FuncMacro { macro_id, param_count })
                 } else {
                     None
@@ -387,7 +387,7 @@ impl FrameStack {
                 None
             };
 
-            let mut param_map: HashMap<usize, Vec<CToken>> =
+            let mut param_map: HashMap<usize, Vec<Token>> =
                 param_ids.iter().copied().zip(param_tokens).collect();
             if param_count < id_count {
                 // TODO: Error about parameter not provided.
@@ -421,7 +421,7 @@ impl FrameStack {
         index: usize,
         end: usize,
         macro_id: usize,
-        params: HashMap<usize, Vec<CToken>>,
+        params: HashMap<usize, Vec<Token>>,
     ) {
         // By assuming each parameter will show up at least once, we get a good initial capacity estimation.
         let sum_parameter_lengths = params.iter().fold(0, |accum, value| accum + value.1.len());
@@ -476,7 +476,7 @@ impl FrameStack {
         })
     }
 
-    fn collect_func_macro_invocation(&mut self, param_count: usize) -> Vec<Vec<CToken>> {
+    fn collect_func_macro_invocation(&mut self, param_count: usize) -> Vec<Vec<Token>> {
         let mut param_tokens = vec![Vec::new()];
         let mut paren_layers = 0usize;
         let mut in_preprocessor = false;

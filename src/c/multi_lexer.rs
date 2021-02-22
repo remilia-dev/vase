@@ -6,10 +6,10 @@ use std::path::Path;
 
 use crate::{
     c::{
-        CCompileEnv,
-        CIncludeType,
-        CLexer,
+        CompileEnv,
         FileId,
+        IncludeType,
+        Lexer,
     },
     sync::{
         Arc,
@@ -20,14 +20,14 @@ use crate::{
     util::CachedString,
 };
 
-pub struct CMultiLexer {
+pub struct MultiLexer {
     path_to_file_id: RwLock<HashMap<Arc<Path>, FileId>>,
-    env: Arc<CCompileEnv>,
+    env: Arc<CompileEnv>,
 }
-impl CMultiLexer {
-    pub fn new(env: Arc<CCompileEnv>) -> CMultiLexer {
+impl MultiLexer {
+    pub fn new(env: Arc<CompileEnv>) -> MultiLexer {
         // OPTIMIZATION: May be able to improve the hashmaps by using a different hasher.
-        CMultiLexer {
+        MultiLexer {
             path_to_file_id: RwLock::new(HashMap::new()),
             env,
         }
@@ -56,7 +56,7 @@ impl CMultiLexer {
                 let (to_lex, file_id) = tuple_args;
 
                 let mut lexer = tl_lexer
-                    .get_or(|| RefCell::new(CLexer::new(&self.env, &include_callback)))
+                    .get_or(|| RefCell::new(Lexer::new(&self.env, &include_callback)))
                     .borrow_mut();
                 let tokens = lexer.lex_file(file_id, to_lex);
                 self.env.file_id_to_tokens().set(file_id, tokens.into());
@@ -66,7 +66,7 @@ impl CMultiLexer {
 
     pub fn find_or_add_include(
         &self,
-        inc_type: CIncludeType,
+        inc_type: IncludeType,
         filename: &CachedString,
         curr_file: Option<&Arc<Path>>,
     ) -> (Option<Arc<Path>>, Option<FileId>) {

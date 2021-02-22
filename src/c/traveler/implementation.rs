@@ -3,17 +3,17 @@
 use crate::{
     c::{
         traveler::{
-            CTravelerState,
             FrameStack,
             MacroKind,
+            TravelerState,
         },
-        CCompileEnv,
-        CKeyword,
-        CStringType,
-        CToken,
-        CTokenKind,
-        CTokenKind::*,
-        CTokenStack,
+        CompileEnv,
+        FileTokens,
+        Keyword,
+        StringType,
+        Token,
+        TokenKind,
+        TokenKind::*,
     },
     sync::Arc,
     util::{
@@ -22,43 +22,43 @@ use crate::{
     },
 };
 
-pub struct CTraveler {
-    env: Arc<CCompileEnv>,
+pub struct Traveler {
+    env: Arc<CompileEnv>,
     frames: FrameStack,
     str_builder: StringBuilder,
 }
 
-impl CTraveler {
-    pub fn new(env: Arc<CCompileEnv>) -> CTraveler {
+impl Traveler {
+    pub fn new(env: Arc<CompileEnv>) -> Traveler {
         let frames = FrameStack::new(env.clone());
         // OPTIMIZATION: A different hasher may be more performant
-        CTraveler {
+        Traveler {
             env,
             frames,
             str_builder: StringBuilder::new(),
         }
     }
 
-    pub fn load_start(&mut self, tokens: Arc<CTokenStack>) {
+    pub fn load_start(&mut self, tokens: Arc<FileTokens>) {
         self.frames.load_start(tokens);
         // self.frames starts before the first token in the file.
         // This allows handling any preprocessor instructions at the start of the file.
         self.move_forward();
     }
 
-    pub fn save_state(&self) -> CTravelerState {
+    pub fn save_state(&self) -> TravelerState {
         self.frames.save_state()
     }
 
-    pub fn load_state(&mut self, state: CTravelerState) {
+    pub fn load_state(&mut self, state: TravelerState) {
         self.frames.load_state(state);
     }
 
-    pub fn head(&self) -> &CToken {
+    pub fn head(&self) -> &Token {
         self.frames.head()
     }
 
-    pub fn move_forward(&mut self) -> &CToken {
+    pub fn move_forward(&mut self) -> &Token {
         self.frames.move_forward();
         loop {
             if self.frames.is_token_joiner_next() {
@@ -110,7 +110,7 @@ impl CTraveler {
                     unimplemented!("TODO: Error")
                 },
                 PrePragma => unimplemented!("#pragma isn't implemented yet."),
-                Keyword(CKeyword::Pragma, ..) => {
+                Keyword(Keyword::Pragma, ..) => {
                     unimplemented!("_Pragma isn't implemented yet.")
                 },
                 ref token if token.is_definable() => {
@@ -176,7 +176,7 @@ impl CTraveler {
             (
                 Identifier(ref id),
                 String {
-                    str_type: CStringType::Default,
+                    str_type: StringType::Default,
                     is_char,
                     has_complex_escapes,
                     str_data,
@@ -231,7 +231,7 @@ impl CTraveler {
             },
         };
 
-        let joined_token = CToken::new(join_location, true, joined);
+        let joined_token = Token::new(join_location, true, joined);
 
         self.frames.push_token(joined_token);
     }
@@ -381,7 +381,7 @@ impl CTraveler {
     fn handle_object_macro(&mut self, macro_id: usize) {
         if matches!(
             self.frames.preview_next_kind(false),
-            Some(&CTokenKind::PreEnd)
+            Some(&TokenKind::PreEnd)
         ) {
             // TODO: Ensure the previous macro is the same (otherwise report warning)
             let token = self.frames.head().clone();

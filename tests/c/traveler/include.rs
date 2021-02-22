@@ -1,6 +1,6 @@
 // Copyright 2021. remilia-dev
 // This source code is licensed under GPLv3 or any later version.
-use vase::c::CTokenKind::*;
+use vase::c::TokenKind::*;
 
 use super::{
     new_env,

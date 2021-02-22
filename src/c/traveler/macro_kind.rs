@@ -2,8 +2,8 @@
 // This source code is licensed under GPLv3 or any later version.
 use crate::c::{
     traveler::Frame,
-    CToken,
     FileId,
+    Token,
 };
 
 /// A enum representing the different types of macros.
@@ -12,7 +12,7 @@ pub(super) enum MacroKind {
     /// An object macro that contains no tokens.
     Empty,
     /// An object macro that contains a single token.
-    SingleToken { token: CToken },
+    SingleToken { token: Token },
     /// An object macro that contains at least two tokens.
     ObjectMacro {
         /// The file id the macro was defined in.

@@ -1,7 +1,7 @@
 // Copyright 2021. remilia-dev
 // This source code is licensed under GPLv3 or any later version.
-use vase::c::CKeyword;
-use vase::c::CTokenKind::*;
+use vase::c::Keyword;
+use vase::c::TokenKind::*;
 
 use super::{
     new_env,
@@ -38,7 +38,7 @@ fn object_macros_work() {
             Identifier(cache.get_or_cache("single_macro")),
             Identifier(cache.get_or_cache("multiple")),
             Identifier(cache.get_or_cache("tokens")),
-            Keyword(CKeyword::Long, cache.get_or_cache("long").uniq_id()),
+            Keyword(Keyword::Long, cache.get_or_cache("long").uniq_id()),
             Identifier(cache.get_or_cache("X3")),
             Identifier(cache.get_or_cache("RECURSE")),
         ],
@@ -145,7 +145,7 @@ fn can_undef_macros() {
             Identifier(cache.get_or_cache("FUNCTION")),
             LParen,
             RParen,
-            Keyword(CKeyword::Int, cache.get_or_cache("int").uniq_id()),
+            Keyword(Keyword::Int, cache.get_or_cache("int").uniq_id()),
         ],
     );
 }

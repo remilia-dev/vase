@@ -7,33 +7,33 @@ mod token_joining;
 
 use vase::{
     c::{
-        CCompileEnv,
-        CCompileSettings,
-        CLexer,
-        CTokenKind,
-        CTraveler,
+        CompileEnv,
+        CompileSettings,
+        Lexer,
+        TokenKind,
+        Traveler,
     },
     sync::Arc,
 };
 
-fn new_env() -> Arc<CCompileEnv> {
-    Arc::new(CCompileEnv::new(CCompileSettings::default()))
+fn new_env() -> Arc<CompileEnv> {
+    Arc::new(CompileEnv::new(CompileSettings::default()))
 }
 
-fn run_test(env: Arc<CCompileEnv>, sources: &[&str], expected: &[CTokenKind]) {
+fn run_test(env: Arc<CompileEnv>, sources: &[&str], expected: &[TokenKind]) {
     if sources.len() > 2 {
         panic!(
             "This test helper can only support up to two sources. All includes go to the second source."
         );
     }
 
-    let mut lexer = CLexer::new(&env, &|_, _, _| Some(1));
+    let mut lexer = Lexer::new(&env, &|_, _, _| Some(1));
     for (i, source) in sources.iter().enumerate() {
         let tokens = lexer.lex_bytes(i as u32, source.as_bytes());
         env.file_id_to_tokens().push(Arc::new(tokens));
     }
 
-    let mut traveler = CTraveler::new(env.clone());
+    let mut traveler = Traveler::new(env.clone());
     traveler.load_start(env.file_id_to_tokens()[0].clone());
 
     for expected_token in expected.iter() {
@@ -41,5 +41,5 @@ fn run_test(env: Arc<CCompileEnv>, sources: &[&str], expected: &[CTokenKind]) {
         traveler.move_forward();
     }
 
-    assert_eq!(traveler.head().kind(), &CTokenKind::Eof);
+    assert_eq!(traveler.head().kind(), &TokenKind::Eof);
 }

@@ -4,19 +4,19 @@ use std::path::Path;
 
 use crate::sync::Arc;
 
-pub struct CCompileSettings {
-    pub version: CLangVersion,
+pub struct CompileSettings {
+    pub version: LangVersion,
     pub system_includes: Vec<Box<Path>>,
     pub local_includes: Vec<Box<Path>>,
     pub source_files: Vec<Arc<Path>>,
 }
 
-impl CCompileSettings {}
+impl CompileSettings {}
 
-impl Default for CCompileSettings {
+impl Default for CompileSettings {
     fn default() -> Self {
-        let mut res = CCompileSettings {
-            version: CLangVersion::C89,
+        let mut res = CompileSettings {
+            version: LangVersion::C89,
             system_includes: Vec::new(),
             local_includes: Vec::new(),
             source_files: Vec::new(),
@@ -32,7 +32,7 @@ impl Default for CCompileSettings {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
-pub enum CLangVersion {
+pub enum LangVersion {
     C89,
     C99,
     C11,

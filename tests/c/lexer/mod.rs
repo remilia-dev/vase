@@ -8,21 +8,21 @@ use std::path::Path;
 
 use vase::{
     c::{
-        CCompileEnv,
-        CCompileSettings,
-        CLexer,
-        CTokenKind,
+        CompileEnv,
+        CompileSettings,
         FileId,
+        Lexer,
+        TokenKind,
     },
     sync::Arc,
     util::CachedString,
 };
 
-fn new_env() -> Arc<CCompileEnv> {
-    Arc::new(CCompileEnv::new(CCompileSettings::default()))
+fn new_env() -> Arc<CompileEnv> {
+    Arc::new(CompileEnv::new(CompileSettings::default()))
 }
 
-fn run_test(env: Arc<CCompileEnv>, source: &str, expected: &[CTokenKind], allow_includes: bool) {
+fn run_test(env: Arc<CompileEnv>, source: &str, expected: &[TokenKind], allow_includes: bool) {
     let callback = &|_, _: &CachedString, _: &Option<Arc<Path>>| -> Option<FileId> {
         assert!(
             allow_includes,
@@ -30,7 +30,7 @@ fn run_test(env: Arc<CCompileEnv>, source: &str, expected: &[CTokenKind], allow_
         );
         None
     };
-    let mut lexer = CLexer::new(&env, callback);
+    let mut lexer = Lexer::new(&env, callback);
     let tokens = lexer.lex_bytes(0, source.as_bytes());
 
     for i in 0..expected.len() {
@@ -41,7 +41,7 @@ fn run_test(env: Arc<CCompileEnv>, source: &str, expected: &[CTokenKind], allow_
 #[test]
 fn escape_new_line_adds_to_token_length() {
     let env = new_env();
-    let mut lexer = CLexer::new(&env, &|_, _, _| panic!("No includes should occur!"));
+    let mut lexer = Lexer::new(&env, &|_, _, _| panic!("No includes should occur!"));
     let tokens = lexer.lex_bytes(0, "+\\\n=\\\n+=+=\\\n".as_bytes());
     // The escape-newline is included in the length of the token if it occurs in the center.
     assert_eq!(tokens[0].location().byte_length, 4);

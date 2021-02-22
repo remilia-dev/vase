@@ -5,10 +5,10 @@ use std::path::Path;
 
 use crate::{
     c::{
-        CLexerError,
-        CToken,
-        CTokenKind,
         FileId,
+        LexerError,
+        Token,
+        TokenKind,
     },
     sync::Arc,
     util::{
@@ -18,18 +18,18 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct CTokenStack {
-    tokens: Vec<CToken>,
+pub struct FileTokens {
+    tokens: Vec<Token>,
     file_references: HashMap<CachedString, Option<FileId>>,
-    errors: Vec<CLexerError>,
+    errors: Vec<LexerError>,
     path: Option<Arc<Path>>,
     file_id: FileId,
 }
 // The stack should always contain at least one token (EOF).
 #[allow(clippy::len_without_is_empty)]
-impl CTokenStack {
+impl FileTokens {
     pub fn new(file_id: FileId, path: Option<Arc<Path>>) -> Self {
-        CTokenStack {
+        FileTokens {
             tokens: Vec::new(),
             file_references: HashMap::new(),
             errors: Vec::new(),
@@ -39,21 +39,21 @@ impl CTokenStack {
     }
 
     pub fn new_empty(file_id: FileId, path: Option<Arc<Path>>) -> Self {
-        let mut this = CTokenStack::new(file_id, path);
-        this.append(CToken::new_first_byte(file_id, CTokenKind::Eof));
+        let mut this = FileTokens::new(file_id, path);
+        this.append(Token::new_first_byte(file_id, TokenKind::Eof));
         this.finalize();
         this
     }
 
-    pub fn new_error(file_id: FileId, path: Option<Arc<Path>>, error: CLexerError) -> Self {
-        let mut this = CTokenStack::new(file_id, path);
+    pub fn new_error(file_id: FileId, path: Option<Arc<Path>>, error: LexerError) -> Self {
+        let mut this = FileTokens::new(file_id, path);
         this.add_error_token(SourceLocation::new_first_byte(file_id), error);
-        this.append(CToken::new_first_byte(file_id, CTokenKind::Eof));
+        this.append(Token::new_first_byte(file_id, TokenKind::Eof));
         this.finalize();
         this
     }
 
-    pub fn append(&mut self, token: CToken) -> usize {
+    pub fn append(&mut self, token: Token) -> usize {
         let index = self.tokens.len();
         self.tokens.push(token);
         index
@@ -63,10 +63,10 @@ impl CTokenStack {
         self.file_references.insert(include_name.clone(), file_id);
     }
 
-    pub fn add_error_token(&mut self, location: SourceLocation, error: CLexerError) {
+    pub fn add_error_token(&mut self, location: SourceLocation, error: LexerError) {
         let index = self.errors.len();
         self.errors.push(error);
-        let error_token = CToken::new(location, false, CTokenKind::LexerError(index));
+        let error_token = Token::new(location, false, TokenKind::LexerError(index));
         self.append(error_token);
     }
 
@@ -86,7 +86,7 @@ impl CTokenStack {
         *self.file_references.get(inc_str)?
     }
 
-    pub fn errors(&self) -> &Vec<CLexerError> {
+    pub fn errors(&self) -> &Vec<LexerError> {
         &self.errors
     }
 
@@ -101,15 +101,15 @@ impl CTokenStack {
         }
     }
 }
-impl std::ops::Index<usize> for CTokenStack {
-    type Output = CToken;
+impl std::ops::Index<usize> for FileTokens {
+    type Output = Token;
 
-    fn index(&self, index: usize) -> &CToken {
+    fn index(&self, index: usize) -> &Token {
         &self.tokens[index]
     }
 }
-impl std::ops::IndexMut<usize> for CTokenStack {
-    fn index_mut(&mut self, index: usize) -> &mut CToken {
+impl std::ops::IndexMut<usize> for FileTokens {
+    fn index_mut(&mut self, index: usize) -> &mut Token {
         &mut self.tokens[index]
     }
 }

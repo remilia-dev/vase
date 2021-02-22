@@ -5,8 +5,8 @@ use std::collections::HashMap;
 use crate::{
     c::{
         traveler::MacroHandle,
-        CToken,
         FileId,
+        Token,
     },
     sync::Arc,
 };
@@ -31,7 +31,7 @@ pub(super) enum Frame {
     /// This token could be the result of a joined token or an object macro with only one token.
     SingleToken {
         /// The token this frame represents.
-        token: CToken,
+        token: Token,
         /// The unique id of the object macro this is from.
         ///
         /// If this value is usize::MAX, then this is actually from a token-join operator.
@@ -59,7 +59,7 @@ pub(super) enum Frame {
         ///
         /// This is list can be very massive, it is contained in an Arc for when the traveler
         /// state is saved.
-        tokens: Arc<Vec<CToken>>,
+        tokens: Arc<Vec<Token>>,
         /// The id of the file to get tokens from.
         ///
         /// This is the file that the macro was defined in.
@@ -80,7 +80,7 @@ pub(super) enum Frame {
         /// This will always *include* the [PreEnd](crate::c::CTokenKind::PreEnd) token.
         end: usize,
         /// A map from a unique id to the tokens the parameter makes up.
-        params: HashMap<usize, Vec<CToken>>,
+        params: HashMap<usize, Vec<Token>>,
     },
     /// A frame that represents a token collector's parameter.
     ///

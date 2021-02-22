@@ -10,18 +10,18 @@ use crate::{
 };
 
 #[derive(Clone, Debug)]
-pub struct CToken {
+pub struct Token {
     location: SourceLocation,
     whitespace_before: bool,
-    kind: CTokenKind,
+    kind: TokenKind,
 }
-impl CToken {
-    pub fn new(location: SourceLocation, whitespace_before: bool, kind: CTokenKind) -> CToken {
-        CToken { location, whitespace_before, kind }
+impl Token {
+    pub fn new(location: SourceLocation, whitespace_before: bool, kind: TokenKind) -> Token {
+        Token { location, whitespace_before, kind }
     }
 
-    pub fn new_first_byte(file_id: FileId, kind: CTokenKind) -> CToken {
-        CToken {
+    pub fn new_first_byte(file_id: FileId, kind: TokenKind) -> Token {
+        Token {
             location: SourceLocation::new_first_byte(file_id),
             whitespace_before: false,
             kind,
@@ -34,28 +34,28 @@ impl CToken {
     pub fn whitespace_before(&self) -> bool {
         self.whitespace_before
     }
-    pub fn kind(&self) -> &CTokenKind {
+    pub fn kind(&self) -> &TokenKind {
         &self.kind
     }
-    pub fn kind_mut(&mut self) -> &mut CTokenKind {
+    pub fn kind_mut(&mut self) -> &mut TokenKind {
         &mut self.kind
     }
 }
 
 #[repr(u8)]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum CTokenKind {
+pub enum TokenKind {
     IncludePath {
-        inc_type: CIncludeType,
+        inc_type: IncludeType,
         path: CachedString,
     },
     // OPTIMIZATION: Remove the excess Box (See String too). This would involve using some thin-dst type.
     Message(Arc<Box<str>>),
     Identifier(CachedString),
-    Keyword(CKeyword, usize),
+    Keyword(Keyword, usize),
     Number(CachedString),
     String {
-        str_type: CStringType,
+        str_type: StringType,
         has_complex_escapes: bool,
         is_char: bool,
         str_data: Arc<Box<str>>,
@@ -223,9 +223,9 @@ pub enum CTokenKind {
     Tilde,
     // == End Symbols
 }
-impl CTokenKind {
+impl TokenKind {
     pub fn is_linking(&self) -> bool {
-        use CTokenKind::*;
+        use TokenKind::*;
         matches!(
             self,
             PreIf { .. } | PreIfDef { .. } | PreIfNDef { .. } | PreElif { .. } | PreElse { .. }
@@ -233,12 +233,12 @@ impl CTokenKind {
     }
 
     pub fn ends_a_link(&self) -> bool {
-        use CTokenKind::*;
+        use TokenKind::*;
         matches!(self, PreElse { .. } | PreElif { .. } | PreEndIf { .. })
     }
 
     pub fn set_link(&mut self, val: usize) {
-        use CTokenKind::*;
+        use TokenKind::*;
         match *self {
             PreIf { ref mut link }
             | PreIfDef { ref mut link }
@@ -253,12 +253,12 @@ impl CTokenKind {
     ///
     /// For example `int ## ID` is joinable to produce the identifier `intId`.
     pub fn is_id_joinable(&self) -> bool {
-        use CTokenKind::*;
+        use TokenKind::*;
         matches!(self, Identifier(..) | Keyword(..) | Number(..))
     }
 
     pub fn get_id_join_text(&self) -> &str {
-        use CTokenKind::*;
+        use TokenKind::*;
         match *self {
             Identifier(ref id) => id.string(),
             Keyword(keyword, ..) => keyword.text(),
@@ -270,12 +270,12 @@ impl CTokenKind {
     }
 
     pub fn is_definable(&self) -> bool {
-        use CTokenKind::*;
+        use TokenKind::*;
         matches!(self, Identifier(..) | Keyword(..))
     }
 
     pub fn get_definable_id(&self) -> usize {
-        use CTokenKind::*;
+        use TokenKind::*;
         match *self {
             Identifier(ref id) => id.uniq_id(),
             Keyword(_, unique_id) => unique_id,
@@ -287,7 +287,7 @@ impl CTokenKind {
 
     pub fn is_preprocessor(&self) -> bool {
         // PreBlank isn't treated like a preprocessor because it isn't followed by a PreEnd.
-        use CTokenKind::*;
+        use TokenKind::*;
         matches!(
             *self,
             // Comments are to make rustfmt happy.
@@ -300,7 +300,7 @@ impl CTokenKind {
 
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum CKeyword {
+pub enum Keyword {
     Auto,
     Break,
     Case,
@@ -350,9 +350,9 @@ pub enum CKeyword {
     StaticAssert,
     ThreadLocal,
 }
-impl CKeyword {
+impl Keyword {
     pub fn text(self) -> &'static str {
-        use CKeyword::*;
+        use Keyword::*;
         match self {
             Auto => "auto",
             Break => "break",
@@ -408,35 +408,32 @@ impl CKeyword {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
-pub enum CIncludeType {
+pub enum IncludeType {
     IncludeSystem, // For #include <file>
     IncludeLocal,  // For #include "file"
     IncludeNext,   // For #include_next "file"
 }
-impl CIncludeType {
+impl IncludeType {
     pub fn is_end_char(self, c: char) -> bool {
         match c {
-            '"' => self == CIncludeType::IncludeLocal,
-            '>' => self == CIncludeType::IncludeSystem,
+            '"' => self == IncludeType::IncludeLocal,
+            '>' => self == IncludeType::IncludeSystem,
             _ => false,
         }
     }
 
     pub fn check_relative(self) -> bool {
-        return matches!(
-            self,
-            CIncludeType::IncludeLocal | CIncludeType::IncludeNext
-        );
+        return matches!(self, IncludeType::IncludeLocal | IncludeType::IncludeNext);
     }
 
     pub fn ignore_own_file(self) -> bool {
-        return matches!(self, CIncludeType::IncludeNext);
+        return matches!(self, IncludeType::IncludeNext);
     }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
-pub enum CStringType {
+pub enum StringType {
     Default,
     U8,
     WChar,
@@ -452,7 +449,7 @@ mod tests {
     fn ensure_token_is_at_most_32_bytes() {
         // Testing limits the size of CToken since even small size increases will result in
         // higher memory usage (and not by a tiny amount).
-        let size = std::mem::size_of::<CToken>();
+        let size = std::mem::size_of::<Token>();
         assert!(
             size <= 32,
             "CToken is {} bytes when it should be 32 or less.",

@@ -6,13 +6,13 @@ use vase::c::*;
 use vase::sync::Arc;
 
 fn main() {
-    let mut settings = CCompileSettings::default();
+    let mut settings = CompileSettings::default();
     settings.source_files.push(Arc::from(Path::new("./test.c")));
-    let env = Arc::new(CCompileEnv::new(settings));
-    let mut lexer = CMultiLexer::new(env.clone());
+    let env = Arc::new(CompileEnv::new(settings));
+    let mut lexer = MultiLexer::new(env.clone());
     lexer.lex_multi_threaded(&*env.settings().source_files);
 
-    let mut traveler = CTraveler::new(env.clone());
+    let mut traveler = Traveler::new(env.clone());
     let tokens = env.file_id_to_tokens()[0].clone();
     println!("{:#?}", tokens);
     traveler.load_start(tokens);
@@ -20,7 +20,7 @@ fn main() {
     let mut tokens = Vec::new();
     loop {
         match traveler.head().kind() {
-            CTokenKind::Eof => break,
+            TokenKind::Eof => break,
             token => {
                 tokens.push(token.clone());
                 traveler.move_forward();
