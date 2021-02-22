@@ -11,7 +11,10 @@ use crate::{
         FileId,
     },
     sync::Arc,
-    util::CachedString,
+    util::{
+        CachedString,
+        SourceLocation,
+    },
 };
 
 #[derive(Debug)]
@@ -44,7 +47,7 @@ impl CTokenStack {
 
     pub fn new_error(file_id: FileId, path: Option<Arc<Path>>, error: CLexerError) -> Self {
         let mut this = CTokenStack::new(file_id, path);
-        this.add_error_token(error);
+        this.add_error_token(SourceLocation::new_first_byte(file_id), error);
         this.append(CToken::new_first_byte(file_id, CTokenKind::Eof));
         this.finalize();
         this
@@ -60,11 +63,10 @@ impl CTokenStack {
         self.file_references.insert(include_name.clone(), file_id);
     }
 
-    pub fn add_error_token(&mut self, error: CLexerError) {
+    pub fn add_error_token(&mut self, location: SourceLocation, error: CLexerError) {
         let index = self.errors.len();
         self.errors.push(error);
-        // TODO: Add it with a location.
-        let error_token = CToken::new_unknown(CTokenKind::LexerError(index));
+        let error_token = CToken::new(location, false, CTokenKind::LexerError(index));
         self.append(error_token);
     }
 
@@ -74,6 +76,10 @@ impl CTokenStack {
 
     pub fn file_id(&self) -> FileId {
         self.file_id
+    }
+
+    pub fn path(&self) -> &Option<Arc<Path>> {
+        &self.path
     }
 
     pub fn get_file_ref(&self, inc_str: &CachedString) -> Option<FileId> {

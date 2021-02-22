@@ -3,62 +3,33 @@
 use crate::{
     c::FileId,
     sync::Arc,
-    util::CachedString,
+    util::{
+        CachedString,
+        SourceLocation,
+    },
 };
 
 #[derive(Clone, Debug)]
 pub struct CToken {
-    file_id: FileId,
-    byte: u32,
-    byte_length: u16,
+    location: SourceLocation,
     whitespace_before: bool,
     kind: CTokenKind,
 }
 impl CToken {
-    pub fn new(
-        file_id: FileId,
-        byte: u32,
-        byte_length: u16,
-        whitespace_before: bool,
-        kind: CTokenKind,
-    ) -> CToken {
-        CToken {
-            file_id,
-            byte,
-            byte_length,
-            whitespace_before,
-            kind,
-        }
-    }
-
-    pub fn new_unknown(kind: CTokenKind) -> CToken {
-        CToken {
-            file_id: u32::MAX,
-            byte: u32::MAX,
-            byte_length: u16::MAX,
-            whitespace_before: true,
-            kind,
-        }
+    pub fn new(location: SourceLocation, whitespace_before: bool, kind: CTokenKind) -> CToken {
+        CToken { location, whitespace_before, kind }
     }
 
     pub fn new_first_byte(file_id: FileId, kind: CTokenKind) -> CToken {
         CToken {
-            file_id,
-            byte: 0,
-            byte_length: 0,
+            location: SourceLocation::new_first_byte(file_id),
             whitespace_before: false,
             kind,
         }
     }
 
-    pub fn file_id(&self) -> FileId {
-        self.file_id
-    }
-    pub fn byte(&self) -> u32 {
-        self.byte
-    }
-    pub fn byte_length(&self) -> u16 {
-        self.byte_length
+    pub fn location(&self) -> &SourceLocation {
+        &self.location
     }
     pub fn whitespace_before(&self) -> bool {
         self.whitespace_before

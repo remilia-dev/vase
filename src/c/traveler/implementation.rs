@@ -138,7 +138,7 @@ impl CTraveler {
     fn handle_joiner(&mut self) {
         self.str_builder.clear();
         let first_token = self.head().clone();
-        self.frames.move_forward();
+        let join_location = self.frames.move_forward().location().clone();
         let second_token = self.frames.move_forward().clone();
 
         #[allow(clippy::pattern_type_mismatch)]
@@ -231,8 +231,7 @@ impl CTraveler {
             },
         };
 
-        // TODO: Calculate token length (or just point to the joiner)
-        let joined_token = CToken::new_unknown(joined);
+        let joined_token = CToken::new(join_location, true, joined);
 
         self.frames.push_token(joined_token);
     }
