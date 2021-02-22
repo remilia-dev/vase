@@ -505,6 +505,9 @@ impl std::fmt::Debug for TrieNodePtr {
 
 #[cfg(test)]
 mod tests {
+    // Similar names are used because of testing similar string values.
+    #![allow(clippy::similar_names)]
+
     use super::*;
 
     #[test]
