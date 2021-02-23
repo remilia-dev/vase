@@ -35,11 +35,6 @@ impl LexerError {
 }
 
 enum_with_properties! {
-    pub fn severity(&self) -> Severity {
-        use Severity::*;
-    }
-    pub fn code(&self) -> &'static str {}
-
     #[derive(Clone, Debug, Eq, PartialEq)]
     pub enum LexerErrorKind {
         // == Fatals
@@ -58,6 +53,15 @@ enum_with_properties! {
         UnendedInclude,
         #[values(Error, "LE312")]
         UnendedString,
+    }
+
+    impl LexerErrorKind {
+        #[property]
+        pub fn severity(&self) -> Severity {
+            use Severity::*;
+        }
+        #[property]
+        pub fn code(&self) -> &'static str {}
     }
 }
 impl From<std::io::Error> for LexerErrorKind {

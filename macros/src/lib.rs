@@ -1,5 +1,7 @@
 // Copyright 2021. remilia-dev
 // This source code is licensed under GPLv3 or any later version.
+#![feature(drain_filter)]
+
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
@@ -16,9 +18,10 @@ use syn::{
 /// The goal of this macro is to avoid having a stupid-long match
 /// statement just to get a constant property.
 ///
-/// The functions defining the property come first and then the
-/// definition of the enum. The property functions may only
-/// take a version of self.
+/// The enum definition comes first and then an implementation that
+/// contains at least one property method
+///
+/// Property methods are defined with a `#[property]` attribute.
 ///
 /// The values for each enum are defined in a `#[values()]` attribute
 /// in the order the property functions were defined. The value can
@@ -29,14 +32,17 @@ use syn::{
 /// ```
 /// # use vase_macros::enum_with_properties;
 /// enum_with_properties! {
-///     fn name(&self) -> &'static str {}
-///     fn region_code(&self) -> u32 {}
-///
 ///     enum Region {
 ///         #[values("The Cold North", 65)]
 ///         North,
 ///         #[values("The Warm South", 32)]
 ///         South,
+///     }
+///     impl Region {
+///         #[property]
+///         fn name(&self) -> &'static str {}
+///         #[property]
+///         fn region_code(&self) -> u32 {}
 ///     }
 /// }
 ///
@@ -48,115 +54,120 @@ use syn::{
 /// ```
 #[proc_macro]
 pub fn enum_with_properties(input: TokenStream) -> TokenStream {
-    let EnumWithProperties {
-        mut properties,
-        enumeration,
-        enum_values,
-    } = parse_macro_input!(input as EnumWithProperties);
-
-    let enum_name = enumeration.ident.clone();
-
-    for (prop_index, property) in properties.iter_mut().enumerate() {
-        let mut arms = Vec::new();
-        for (enum_index, variant) in enumeration.variants.iter().enumerate() {
-            let value = &enum_values[enum_index][prop_index];
-
-            let variant_name = &variant.ident;
-            match variant.fields {
-                Fields::Named(ref fields) => {
-                    let fields: Vec<Ident> = (fields.named.iter()) //
-                        .map(|f| f.ident.clone().unwrap()) //
-                        .collect();
-                    arms.push(quote! {
-                        #variant_name { #(#fields),* } => #value
-                    })
-                },
-                Fields::Unnamed(ref fields) => {
-                    let fields: Vec<Ident> = (0..fields.unnamed.len())
-                        .map(|i| Ident::new(format!("v{}", i).as_str(), fields.span()))
-                        .collect();
-                    arms.push(quote! {
-                        #variant_name(#(#fields),*) => #value
-                    })
-                },
-                Fields::Unit => {
-                    arms.push(quote! {
-                        #variant_name => #value
-                    });
-                },
-            }
-        }
-
-        let mtch = quote! {
-            {
-                use #enum_name::*;
-                #[allow(unused, clippy::pattern_type_mismatch)]
-                match self {
-                    #(#arms,)*
-                }
-            }
-        }
-        .into();
-
-        let stmt = parse_macro_input!(mtch as Stmt);
-
-        property.block.stmts.push(stmt);
-    }
-
-    proc_macro::TokenStream::from(quote! {
-        #enumeration
-
-        impl #enum_name {
-            #(#properties)*
-        }
-    })
+    let enum_ = parse_macro_input!(input as EnumWithProperties);
+    enum_.to_stream()
 }
 
 struct EnumWithProperties {
-    properties: Vec<ImplItemMethod>,
     enumeration: ItemEnum,
+    implementation: ItemImpl,
+    properties: Vec<ImplItemMethod>,
     enum_values: Vec<Vec<Expr>>,
+}
+
+impl EnumWithProperties {
+    fn to_stream(self) -> proc_macro::TokenStream {
+        let Self {
+            enumeration,
+            mut implementation,
+            mut properties,
+            enum_values,
+        } = self;
+
+        let enum_name = enumeration.ident.clone();
+
+        for (prop_index, property) in properties.iter_mut().enumerate() {
+            let mut arms = Vec::new();
+            for (enum_index, variant) in enumeration.variants.iter().enumerate() {
+                let value = &enum_values[enum_index][prop_index];
+
+                let variant_name = &variant.ident;
+                match variant.fields {
+                    Fields::Named(ref fields) => {
+                        let fields: Vec<Ident> = (fields.named.iter()) //
+                            .map(|f| f.ident.clone().unwrap()) //
+                            .collect();
+                        arms.push(quote! {
+                            #variant_name { #(#fields),* } => #value
+                        })
+                    },
+                    Fields::Unnamed(ref fields) => {
+                        let fields: Vec<Ident> = (0..fields.unnamed.len())
+                            .map(|i| Ident::new(format!("v{}", i).as_str(), fields.span()))
+                            .collect();
+                        arms.push(quote! {
+                            #variant_name(#(#fields),*) => #value
+                        })
+                    },
+                    Fields::Unit => {
+                        arms.push(quote! {
+                            #variant_name => #value
+                        });
+                    },
+                }
+            }
+
+            let mtch = quote! {
+                {
+                    use #enum_name::*;
+                    #[allow(unused, clippy::pattern_type_mismatch)]
+                    match self {
+                        #(#arms,)*
+                    }
+                }
+            }
+            .into();
+
+            let stmt = parse_macro_input!(mtch as Stmt);
+
+            property.block.stmts.push(stmt);
+        }
+
+        for property in properties.into_iter() {
+            implementation.items.push(ImplItem::Method(property));
+        }
+
+        proc_macro::TokenStream::from(quote! {
+            #enumeration
+
+            #implementation
+        })
+    }
 }
 
 impl Parse for EnumWithProperties {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let mut properties = Vec::new();
-        loop {
-            let fork = input.fork();
-            if fork.parse::<Visibility>().is_ok() {
-                if !fork.parse::<Token![fn]>().is_ok() {
-                    break;
+        let mut enumeration: ItemEnum = input.parse()?;
+        let mut implementation: ItemImpl = input.parse()?;
+
+        let properties_raw: Vec<ImplItem> = implementation
+            .items
+            .drain_filter(|item| {
+                if let ImplItem::Method(method) = item {
+                    return find_attribute("property", &mut method.attrs).is_some();
                 }
-            } else if !input.peek(Token![fn]) {
-                break;
-            }
 
-            let method: ImplItemMethod = input.parse()?;
-            let inputs = &method.sig.inputs;
+                false
+            })
+            .collect();
 
-            if inputs.len() != 1 {
-                return Err(Error::new(
-                    method.span(),
-                    "Property functions may only take 1 argument.",
-                ));
-            } else if !matches!(inputs[0], FnArg::Receiver(..)) {
-                return Err(Error::new(
-                    method.span(),
-                    "Property functions may only take a version of self.",
-                ));
-            } else {
-                properties.push(method);
-            }
-        }
+        let properties: Vec<ImplItemMethod> = properties_raw
+            .into_iter()
+            .map(|item| {
+                if let ImplItem::Method(method) = item {
+                    method
+                } else {
+                    panic!("Only methods should have been added to the list.");
+                }
+            })
+            .collect();
 
         if properties.is_empty() {
             return Err(Error::new(
-                input.span(),
-                "Properties are declared at the top as function signatures. You must declare at least one property.",
+                implementation.span(),
+                "The impl block must contain at least one #[property] function.",
             ));
         }
-
-        let mut enumeration: ItemEnum = input.parse()?;
 
         let mut enum_values = Vec::new();
         for variant in &mut enumeration.variants {
@@ -194,6 +205,7 @@ impl Parse for EnumWithProperties {
 
         Ok(EnumWithProperties {
             properties,
+            implementation,
             enumeration,
             enum_values,
         })
