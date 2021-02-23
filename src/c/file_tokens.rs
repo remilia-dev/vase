@@ -7,6 +7,7 @@ use crate::{
     c::{
         FileId,
         LexerError,
+        LexerErrorKind,
         Token,
         TokenKind,
     },
@@ -45,9 +46,11 @@ impl FileTokens {
         this
     }
 
-    pub fn new_error(file_id: FileId, path: Option<Arc<Path>>, error: LexerError) -> Self {
+    pub fn new_error<T>(file_id: FileId, path: Option<Arc<Path>>, error: T) -> Self
+    where T: Into<LexerErrorKind> {
         let mut this = FileTokens::new(file_id, path);
-        this.add_error_token(SourceLocation::new_first_byte(file_id), error);
+        let location = SourceLocation::new_first_byte(file_id);
+        this.add_error_token(LexerError::new(location, error.into()));
         this.append(Token::new_first_byte(file_id, TokenKind::Eof));
         this.finalize();
         this
@@ -63,8 +66,9 @@ impl FileTokens {
         self.file_references.insert(include_name.clone(), file_id);
     }
 
-    pub fn add_error_token(&mut self, location: SourceLocation, error: LexerError) {
+    pub fn add_error_token(&mut self, error: LexerError) {
         let index = self.errors.len();
+        let location = error.location().clone();
         self.errors.push(error);
         let error_token = Token::new(location, false, TokenKind::LexerError(index));
         self.append(error_token);

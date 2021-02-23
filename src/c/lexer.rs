@@ -13,6 +13,7 @@ use crate::{
         FileReader,
         FileTokens,
         LexerError,
+        LexerErrorKind,
     },
     sync::Arc,
     util::{
@@ -53,8 +54,7 @@ impl<'a> Lexer<'a> {
         // The scope is here to free file resources early.
         {
             let file = match File::open(&file_path) {
-                Err(err) => {
-                    let error = LexerError::Io(err.into());
+                Err(error) => {
                     return FileTokens::new_error(file_id, Some(file_path), error);
                 },
                 Ok(f) => f,
@@ -69,15 +69,13 @@ impl<'a> Lexer<'a> {
             // TODO: Lock the file that is being mapped. This would prevent the memory map from changing under us.
             // It would also allow this to be truly safe.
             let mmap = match unsafe { memmap2::MmapOptions::new().map(&file) } {
-                Err(err) => {
-                    let error = LexerError::Io(err.into());
+                Err(error) => {
                     return FileTokens::new_error(file_id, Some(file_path), error);
                 },
                 Ok(m) => m,
             };
 
-            if let Some(err) = self.reader.load_bytes(file_id, &mmap) {
-                let error = LexerError::Utf8Decode(err);
+            if let Some(error) = self.reader.load_bytes(file_id, &mmap) {
                 return FileTokens::new_error(file_id, Some(file_path), error);
             }
         }
@@ -86,8 +84,8 @@ impl<'a> Lexer<'a> {
     }
 
     pub fn lex_bytes(&mut self, file_id: FileId, bytes: &[u8]) -> FileTokens {
-        if let Some(err) = self.reader.load_bytes(file_id, bytes) {
-            return FileTokens::new_error(file_id, None, LexerError::Utf8Decode(err));
+        if let Some(error) = self.reader.load_bytes(file_id, bytes) {
+            return FileTokens::new_error(file_id, None, error);
         }
         self.lex(file_id, None)
     }
@@ -331,8 +329,8 @@ impl<'a> LexerState<'a> {
                 Some(index) => self.tokens[index].kind_mut().set_link(curr_index),
                 None => {
                     let location = self.source_location();
-                    let error = LexerError::MissingCorrespondingIf(location.clone());
-                    self.tokens.add_error_token(location, error);
+                    let error = LexerError::new(location, LexerErrorKind::MissingCorrespondingIf);
+                    self.tokens.add_error_token(error);
                 },
             }
         }
@@ -376,8 +374,8 @@ impl<'a> LexerState<'a> {
 
         if !correctly_ended {
             let location = self.reader.location();
-            let error = LexerError::UnendedInclude(location.clone());
-            self.tokens.add_error_token(location, error);
+            let error = LexerError::new(location, LexerErrorKind::UnendedInclude);
+            self.tokens.add_error_token(error);
         }
 
         if let CLexerMode::Include { next } = self.mode {
@@ -452,8 +450,8 @@ impl<'a> LexerState<'a> {
 
         if !ended_correctly {
             let location = self.reader.location();
-            let error = LexerError::UnendedString(location.clone());
-            self.tokens.add_error_token(location, error);
+            let error = LexerError::new(location, super::LexerErrorKind::UnendedString);
+            self.tokens.add_error_token(error);
         }
 
         self.add_token(TokenKind::String {
@@ -517,8 +515,8 @@ impl<'a> LexerState<'a> {
                 None => {
                     if multi_line {
                         let location = self.reader.location();
-                        let error = LexerError::UnendedComment(location.clone());
-                        self.tokens.add_error_token(location, error);
+                        let error = LexerError::new(location, LexerErrorKind::UnendedComment);
+                        self.tokens.add_error_token(error);
                     }
                     return;
                 },

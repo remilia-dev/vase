@@ -9,7 +9,7 @@ use crate::{
     },
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Token {
     location: SourceLocation,
     whitespace_before: bool,

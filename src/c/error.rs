@@ -11,6 +11,29 @@ use crate::{
     },
 };
 
+#[derive(Clone, Debug)]
+pub struct LexerError {
+    location: SourceLocation,
+    kind: LexerErrorKind,
+}
+impl LexerError {
+    pub fn new(location: SourceLocation, kind: LexerErrorKind) -> Self {
+        LexerError { location, kind }
+    }
+
+    pub fn location(&self) -> &SourceLocation {
+        &self.location
+    }
+
+    pub fn severity(&self) -> Severity {
+        self.kind.severity()
+    }
+
+    pub fn code(&self) -> &'static str {
+        self.kind.code()
+    }
+}
+
 enum_with_properties! {
     pub fn severity(&self) -> Severity {
         use Severity::*;
@@ -18,7 +41,7 @@ enum_with_properties! {
     pub fn code(&self) -> &'static str {}
 
     #[derive(Clone, Debug, Eq, PartialEq)]
-    pub enum LexerError {
+    pub enum LexerErrorKind {
         // == Fatals
         #[values(Fatal, "LF400")]
         Utf8Decode(Utf8DecodeError),
@@ -26,14 +49,24 @@ enum_with_properties! {
         Io(PtrEquality<Arc<std::io::Error>>),
         // == Errors
         #[values(Error, "LE300")]
-        MissingCorrespondingIf(SourceLocation),
+        MissingCorrespondingIf,
         #[values(Error, "LE301")]
-        MissingCorrespondingEndIf(SourceLocation),
+        MissingCorrespondingEndIf,
         #[values(Error, "LE310")]
-        UnendedComment(SourceLocation),
+        UnendedComment,
         #[values(Error, "LE311")]
-        UnendedInclude(SourceLocation),
+        UnendedInclude,
         #[values(Error, "LE312")]
-        UnendedString(SourceLocation),
+        UnendedString,
+    }
+}
+impl From<std::io::Error> for LexerErrorKind {
+    fn from(error: std::io::Error) -> Self {
+        Self::Io(error.into())
+    }
+}
+impl From<Utf8DecodeError> for LexerErrorKind {
+    fn from(error: Utf8DecodeError) -> Self {
+        Self::Utf8Decode(error)
     }
 }
