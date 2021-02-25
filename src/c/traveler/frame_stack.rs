@@ -23,7 +23,7 @@ use crate::{
     util::CachedString,
 };
 
-/// A snapshot of [CTraveler](super::CTraveler)'s progress in a token stack.
+/// A snapshot of [Traveler](super::Traveler)'s progress in a token stack.
 ///
 /// It can be loaded at any point to bring the traveler back to the save point.
 /// However, loading a state from a different traveler (or a re-used traveler) may
@@ -33,7 +33,7 @@ pub struct TravelerState {
     macros: HashMap<usize, MacroKind>,
     should_chain_skip: bool,
 }
-/// A manager struct for where [CTraveler](super::CTraveler) is in a token stack.
+/// A manager struct for where [Traveler](super::Traveler) is in a token stack.
 ///
 /// This includes reading tokens from macros and includes. It is important to note
 /// that FrameStack *never* handles preprocessor instructions (CTraveler does).

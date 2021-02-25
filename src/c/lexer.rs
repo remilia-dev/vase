@@ -49,7 +49,7 @@ impl<'a> Lexer<'a> {
     /// Lexes the file at the given path and produces a stack of all the tokens.
     /// # Errors
     /// Only *fatal* lexer errors are returned. Other errors (such as improperly ended strings)
-    /// are reported using a [LexerError](CTokenKind::LexerError) token.
+    /// are reported using a [LexerError](TokenKind::LexerError) token.
     pub fn lex_file(&mut self, file_id: FileId, file_path: Arc<Path>) -> FileTokens {
         // The scope is here to free file resources early.
         {
