@@ -74,8 +74,6 @@ impl EnumWithProperties {
             enum_values,
         } = self;
 
-        let enum_name = enumeration.ident.clone();
-
         for (prop_index, property) in properties.iter_mut().enumerate() {
             let mut arms = Vec::new();
             for (enum_index, variant) in enumeration.variants.iter().enumerate() {
@@ -88,7 +86,7 @@ impl EnumWithProperties {
                             .map(|f| f.ident.clone().unwrap()) //
                             .collect();
                         arms.push(quote! {
-                            #variant_name { #(#fields),* } => #value
+                            Self::#variant_name { #(#fields),* } => #value
                         })
                     },
                     Fields::Unnamed(ref fields) => {
@@ -96,12 +94,12 @@ impl EnumWithProperties {
                             .map(|i| Ident::new(format!("v{}", i).as_str(), fields.span()))
                             .collect();
                         arms.push(quote! {
-                            #variant_name(#(#fields),*) => #value
+                            Self::#variant_name(#(#fields),*) => #value
                         })
                     },
                     Fields::Unit => {
                         arms.push(quote! {
-                            #variant_name => #value
+                            Self::#variant_name => #value
                         });
                     },
                 }
@@ -109,7 +107,6 @@ impl EnumWithProperties {
 
             let mtch = quote! {
                 {
-                    use #enum_name::*;
                     #[allow(unused, clippy::pattern_type_mismatch)]
                     match self {
                         #(#arms,)*
