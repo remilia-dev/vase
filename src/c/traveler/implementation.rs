@@ -194,22 +194,22 @@ impl Traveler {
                     unimplemented!()
                 }
             },
-            (Number(num1), Number(num2) | Identifier(num2)) => {
-                let cached = self.join_and_cache(num1.string(), num2.string());
-                Number(cached)
+            (part1, part2) if part1.is_number_joinable_with(part2) => {
+                let digits = self.join_and_cache(part1.text(), part2.text());
+                Number(digits)
             },
-            (Number(num), Plus | Minus) => {
-                match num.string().as_bytes().last() {
+            (Number(digits), Plus | Minus) => {
+                match digits.string().as_bytes().last() {
                     Some(b'e' | b'E' | b'p' | b'P') => {
-                        let cached = self.join_and_cache(
-                            num.string(),
+                        let digits = self.join_and_cache(
+                            digits.string(),
                             if matches!(*second_token.kind(), Plus) {
                                 "+"
                             } else {
                                 "-"
                             },
                         );
-                        Number(cached)
+                        Number(digits)
                     },
                     _ => {
                         // TODO: Error about invalid token.
@@ -217,8 +217,8 @@ impl Traveler {
                     },
                 }
             },
-            (id1, id2) if id1.is_id_joinable() && id2.is_id_joinable() => {
-                let cached = self.join_and_cache(id1.get_id_join_text(), id2.get_id_join_text());
+            (id1, id2) if id1.is_id_joinable_with(id2) => {
+                let cached = self.join_and_cache(id1.text(), id2.text());
                 if let Some(keyword) = self.env.cached_to_keywords().get(&cached) {
                     Keyword(*keyword, cached.uniq_id())
                 } else {

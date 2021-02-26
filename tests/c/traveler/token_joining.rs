@@ -141,18 +141,26 @@ fn can_join_numbers() {
         JOIN(0b, 2)
         // So long as something starts with a number, it is considered one
         JOIN(0, some_random_identifier)
+        // Dots can be joined
+        JOIN(1, .)
+        JOIN(., 1)
 
-        // If the number ends in an exponent, pasting with +/- is allowed
         #define JOIN_CHAIN(A, B, C) A ## B ## C
+        // If the number ends in an exponent, pasting with +/- is allowed
         JOIN_CHAIN(1E, +, 2)
         JOIN_CHAIN(0x1P, -, 2)
+        // Dots and numbers can of course be joined to form a float literal:
+        JOIN_CHAIN(0xF, ., C)
         "#],
         &[
             Number(cache.get_or_cache("0xFF")),
             Number(cache.get_or_cache("0b2")),
             Number(cache.get_or_cache("0some_random_identifier")),
+            Number(cache.get_or_cache("1.")),
+            Number(cache.get_or_cache(".1")),
             Number(cache.get_or_cache("1E+2")),
             Number(cache.get_or_cache("0x1P-2")),
+            Number(cache.get_or_cache("0xF.C")),
         ],
     );
 }

@@ -249,22 +249,83 @@ impl TokenKind {
         }
     }
 
+    pub fn is_number_joinable_with(&self, other: &TokenKind) -> bool {
+        use TokenKind::*;
+        match *self {
+            Dot => matches!(*other, Number { .. }),
+            Number { .. } => matches!(*other, Number { .. } | Identifier(..) | Dot),
+            _ => false,
+        }
+    }
+
     /// Is able to be joined using ## with another token that is id-joinable.
     ///
     /// For example `int ## ID` is joinable to produce the identifier `intId`.
-    pub fn is_id_joinable(&self) -> bool {
+    pub fn is_id_joinable_with(&self, other: &TokenKind) -> bool {
         use TokenKind::*;
-        matches!(self, Identifier(..) | Keyword(..) | Number(..))
+        matches!(self, Identifier(..) | Keyword(..))
+            & matches!(other, Identifier(..) | Keyword(..) | Number { .. })
     }
 
-    pub fn get_id_join_text(&self) -> &str {
+    pub fn text(&self) -> &str {
         use TokenKind::*;
         match *self {
             Identifier(ref id) => id.string(),
             Keyword(keyword, ..) => keyword.text(),
-            Number(ref num) => num.string(),
+            Number(ref digits) => digits.string(),
+            LBracket { alt } => (if alt { "<:" } else { "[" }),
+            RBracket { alt } => (if alt { ":>" } else { "]" }),
+            LParen => "(",
+            RParen => ")",
+            LBrace { alt } => (if alt { "<%" } else { "{" }),
+            RBrace { alt } => (if alt { "%>" } else { "}" }),
+            Amp => "&",
+            AmpEqual => "&=",
+            AmpAmp => "&&",
+            Arrow => "->",
+            At => "@",
+            Backslash => "\\",
+            Bang => "!",
+            BangEqual => "!=",
+            Bar => "|",
+            BarEqual => "|=",
+            BarBar => "||",
+            Carrot => "^",
+            CarrotEqual => "^=",
+            Colon => ":",
+            Comma => ",",
+            Dot => ".",
+            DotDotDot => "...",
+            Equal => "=",
+            EqualEqual => "==",
+            Hash { alt } => (if alt { "%:" } else { "#" }),
+            HashHash { alt } => (if alt { "%:%:" } else { "##" }),
+            Minus => "-",
+            MinusEqual => "-=",
+            MinusMinus => "--",
+            LAngle => "<",
+            LAngleEqual => "<=",
+            LShift => "<<",
+            LShiftEqual => "<<=",
+            Percent => "%",
+            PercentEqual => "%=",
+            Plus => "+",
+            PlusEqual => "+=",
+            PlusPlus => "++",
+            QMark => "?",
+            RAngle => ">",
+            RAngleEqual => ">=",
+            RShift => ">>",
+            RShiftEqual => ">>=",
+            Semicolon => ";",
+            Slash => "/",
+            SlashEqual => "/=",
+            Star => "*",
+            StarEqual => "*=",
+            Tilde => "~",
             _ => panic!(
-                "get_id_joinable_text should only be used on tokens that are is_id_joinable."
+                "Token that does not have a corresponding text representation: {:?}",
+                self
             ),
         }
     }
