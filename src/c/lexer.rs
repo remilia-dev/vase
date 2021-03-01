@@ -23,19 +23,19 @@ use crate::{
     },
 };
 
-pub type IncludeCallback<'a> =
-    &'a (dyn Send + Sync + Fn(IncludeType, &CachedString, &Option<Arc<Path>>) -> Option<FileId>);
+pub trait IncludeCallback = FnMut(IncludeType, &CachedString, &Option<Arc<Path>>) -> Option<FileId>;
 
-pub struct Lexer<'a> {
+pub struct Lexer<'a, OnInclude: IncludeCallback> {
     env: &'a CompileEnv,
-    include_callback: IncludeCallback<'a>,
+    include_callback: OnInclude,
     reader: FileReader,
     str_builder: StringBuilder,
     norm_buffer: StringBuilder,
     link_stack: Vec<usize>,
 }
-impl<'a> Lexer<'a> {
-    pub fn new(env: &'a CompileEnv, include_callback: IncludeCallback<'a>) -> Lexer<'a> {
+
+impl<'a, OnInclude: IncludeCallback> Lexer<'a, OnInclude> {
+    pub fn new(env: &'a CompileEnv, include_callback: OnInclude) -> Self {
         Lexer {
             env,
             include_callback,
@@ -104,25 +104,25 @@ enum CLexerMode {
     Message,
 }
 
-struct LexerState<'a> {
+struct LexerState<'a, OnInclude: IncludeCallback> {
     mode: CLexerMode,
     at_start_of_line: bool,
     have_skipped_whitespace: bool,
     start_location: SourceLocation,
     tokens: FileTokens,
     env: &'a CompileEnv,
-    include_callback: IncludeCallback<'a>,
+    include_callback: &'a mut OnInclude,
     reader: &'a mut FileReader,
     str_builder: &'a mut StringBuilder,
     norm_buffer: &'a mut StringBuilder,
     link_stack: &'a mut Vec<usize>,
 }
 
-impl<'a> LexerState<'a> {
+impl<'a, OnInclude: IncludeCallback> LexerState<'a, OnInclude> {
     fn create_and_lex(
         file_id: FileId,
         path: Option<Arc<Path>>,
-        shared_data: &'a mut Lexer,
+        shared_data: &'a mut Lexer<'_, OnInclude>,
     ) -> FileTokens {
         LexerState {
             mode: CLexerMode::Normal,
@@ -131,7 +131,7 @@ impl<'a> LexerState<'a> {
             start_location: SourceLocation::new_first_byte(file_id),
             tokens: FileTokens::new(file_id, path),
             env: shared_data.env,
-            include_callback: shared_data.include_callback,
+            include_callback: &mut shared_data.include_callback,
             reader: &mut shared_data.reader,
             str_builder: &mut shared_data.str_builder,
             norm_buffer: &mut shared_data.norm_buffer,

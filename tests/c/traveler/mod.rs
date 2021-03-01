@@ -5,6 +5,8 @@ mod include;
 mod macros;
 mod token_joining;
 
+use std::path::Path;
+
 use vase::{
     c::{
         CompileEnv,
@@ -14,6 +16,7 @@ use vase::{
         Traveler,
     },
     sync::Arc,
+    util::CachedString,
 };
 
 fn new_env() -> Arc<CompileEnv> {
@@ -27,7 +30,8 @@ fn run_test(env: Arc<CompileEnv>, sources: &[&str], expected: &[TokenKind]) {
         );
     }
 
-    let mut lexer = Lexer::new(&env, &|_, _, _| Some(1));
+    let callback = |_, _: &CachedString, _: &Option<Arc<Path>>| Some(1u32);
+    let mut lexer = Lexer::new(&env, callback);
     for (i, source) in sources.iter().enumerate() {
         let tokens = lexer.lex_bytes(i as u32, source.as_bytes());
         env.file_id_to_tokens().push(Arc::new(tokens));
