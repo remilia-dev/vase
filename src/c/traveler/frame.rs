@@ -96,9 +96,20 @@ pub(super) enum Frame {
 }
 
 impl Frame {
+    pub fn get_file_id(&self) -> FileId {
+        use Frame::*;
+        match *self {
+            File { file_id, .. } | ObjectMacro { file_id, .. } => file_id,
+            FuncMacro { ref tokens, index, .. } => tokens[index].location().file_id(),
+            SingleToken { ref token, .. } => token.location().file_id(),
+            TokenCollector { .. } | TokenCollectorParameter { .. } => panic!(
+                "Can't get the file id on token collector frames! No analysis should be performed within these frames."
+            ),
+        }
+    }
     /// Increments the index of this frame.
     ///
-    /// Returns if the frame has ran out of values.
+    /// Returns true if the frame has more tokens.
     pub fn increment_index(&mut self) -> bool {
         use Frame::*;
         match *self {

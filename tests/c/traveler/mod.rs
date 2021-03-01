@@ -33,12 +33,14 @@ fn run_test(env: Arc<CompileEnv>, sources: &[&str], expected: &[TokenKind]) {
         env.file_id_to_tokens().push(Arc::new(tokens));
     }
 
-    let mut traveler = Traveler::new(env.clone());
-    traveler.load_start(env.file_id_to_tokens()[0].clone());
+    let mut traveler = Traveler::new(env.clone(), &|err| {
+        panic!("An error should not have occured: {:?}", err);
+    });
+    traveler.load_start(env.file_id_to_tokens()[0].clone()).unwrap();
 
     for expected_token in expected.iter() {
         assert_eq!(traveler.head().kind(), expected_token);
-        traveler.move_forward();
+        traveler.move_forward().unwrap();
     }
 
     assert_eq!(traveler.head().kind(), &TokenKind::Eof);

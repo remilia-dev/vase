@@ -11,10 +11,13 @@ use crate::{
             Frame,
             MacroHandle,
             MacroKind,
+            TravelerError,
+            TravelerState,
         },
         CompileEnv,
         FileId,
         FileTokens,
+        ResultScope,
         Token,
         TokenKind,
         TokenKind::*,
@@ -23,16 +26,9 @@ use crate::{
     util::CachedString,
 };
 
-/// A snapshot of [Traveler](super::Traveler)'s progress in a token stack.
-///
-/// It can be loaded at any point to bring the traveler back to the save point.
-/// However, loading a state from a different traveler (or a re-used traveler) may
-/// inevitably cause panics.
-pub struct TravelerState {
-    frames: VecDeque<Frame>,
-    macros: HashMap<usize, MacroKind>,
-    should_chain_skip: bool,
-}
+type Error = crate::c::TravelerErrorKind;
+type ErrorCallback<'a> = &'a mut dyn FnMut(TravelerError) -> bool;
+
 /// A manager struct for where [Traveler](super::Traveler) is in a token stack.
 ///
 /// This includes reading tokens from macros and includes. It is important to note
@@ -136,9 +132,9 @@ impl FrameStack {
     pub fn preview_next_kind(&self, exit_macros: bool) -> Option<&TokenKind> {
         for i in 0..self.frames.len() {
             match self.frames[i] {
-                Frame::File { file_id, index, .. } => {
+                Frame::File { file_id, index, end, .. } => {
                     let file = &self.file_refs[&file_id];
-                    if index + 1 < file.len() {
+                    if index + 1 < end {
                         return Some(file[index + 1].kind());
                     }
                 },
@@ -197,24 +193,21 @@ impl FrameStack {
         }
         self.head()
     }
+
+    pub fn get_current_file(&self) -> &FileTokens {
+        &self.file_refs[&self.frames[0].get_file_id()]
+    }
     /// Gets the file id of the given include string.
     ///
-    /// This should be stored in one of the file refs of the token stacks.
-    /// # Panics
-    /// Panics if the include reference could not be found.
-    pub fn get_include_ref(&mut self, inc_str: CachedString) -> FileId {
-        for frame in self.frames.iter().rev() {
+    /// This will only examine the top file frame of the stack.
+    pub fn get_include_ref(&mut self, inc_str: &CachedString) -> Option<FileId> {
+        for frame in &self.frames {
             if let Frame::File { file_id, .. } = *frame {
-                if let Some(file_id) = self.file_refs[&file_id].get_file_ref(&inc_str) {
-                    return file_id;
-                }
+                return self.file_refs[&file_id].get_file_ref(inc_str);
             }
         }
 
-        panic!(
-            "Include string was not found in any file frame (it should always exist!): {}",
-            inc_str
-        );
+        None
     }
     /// Gets the file id and index of the current frame.
     /// # Panics
@@ -348,7 +341,11 @@ impl FrameStack {
         }
     }
 
-    pub fn handle_macro(&mut self, handle: MacroHandle) {
+    pub fn handle_macro(
+        &mut self,
+        handle: MacroHandle,
+        on_error: ErrorCallback,
+    ) -> ResultScope<()> {
         match handle {
             MacroHandle::Empty => {
                 // Move past the empty token.
@@ -359,16 +356,22 @@ impl FrameStack {
                 self.frames.push_front(frame)
             },
             MacroHandle::FuncMacro { macro_id, param_count } => {
-                self.handle_function_macro(macro_id, param_count);
+                self.handle_function_macro(macro_id, param_count, on_error)?;
             },
         }
+        Ok(())
     }
 
-    fn handle_function_macro(&mut self, macro_id: usize, param_count: usize) {
+    fn handle_function_macro(
+        &mut self,
+        macro_id: usize,
+        param_count: usize,
+        on_error: ErrorCallback,
+    ) -> ResultScope<()> {
         // Pass the ID of the macro
         self.move_forward();
 
-        let mut param_tokens = self.collect_func_macro_invocation(param_count);
+        let mut param_tokens = self.collect_func_macro_invocation(param_count, on_error)?;
 
         if let MacroKind::FuncMacro {
             file_id,
@@ -390,7 +393,10 @@ impl FrameStack {
             let mut param_map: HashMap<usize, Vec<Token>> =
                 param_ids.iter().copied().zip(param_tokens).collect();
             if param_count < id_count {
-                // TODO: Error about parameter not provided.
+                self.report_error(
+                    Error::FuncInvokeMissingArgs(id_count - param_count),
+                    on_error,
+                )?;
                 for id in &param_ids[param_count..id_count] {
                     param_map.insert(*id, Vec::new());
                 }
@@ -403,13 +409,13 @@ impl FrameStack {
                 (Some(id), None) => {
                     param_map.insert(id, Vec::new());
                 },
-                (None, Some(_)) => {
-                    // TODO: Warn about excess parameters.
+                (None, Some(tokens)) => {
+                    self.report_error(Error::FuncInvokeExcessParameters(tokens), on_error)?;
                 },
                 (None, None) => {},
             }
 
-            self.create_func_macro_frame(file_id, index, end, macro_id, param_map);
+            self.create_func_macro_frame(file_id, index, end, macro_id, param_map, on_error)
         } else {
             panic!("Can't handle a function macro on a non-function macro.");
         }
@@ -422,7 +428,8 @@ impl FrameStack {
         end: usize,
         macro_id: usize,
         params: HashMap<usize, Vec<Token>>,
-    ) {
+        on_error: ErrorCallback,
+    ) -> ResultScope<()> {
         // By assuming each parameter will show up at least once, we get a good initial capacity estimation.
         let sum_parameter_lengths = params.iter().fold(0, |accum, value| accum + value.1.len());
 
@@ -447,7 +454,7 @@ impl FrameStack {
                 ref def if def.is_definable() && self.frames.len() == function_frame => {
                     let param_id = def.get_definable_id();
                     if let Some(handle) = self.frames[0].has_parameter(param_id) {
-                        self.handle_macro(handle);
+                        self.handle_macro(handle, on_error)?;
                         continue;
                     } else {
                         tokens.push(head.clone());
@@ -456,7 +463,7 @@ impl FrameStack {
                 ref def if def.is_definable() => {
                     let macro_id = def.get_definable_id();
                     if let Some(handle) = self.should_handle_macro(macro_id) {
-                        self.handle_macro(handle);
+                        self.handle_macro(handle, on_error)?;
                         continue;
                     } else {
                         tokens.push(head.clone());
@@ -473,10 +480,15 @@ impl FrameStack {
             macro_id,
             index: 0,
             tokens: Arc::new(tokens),
-        })
+        });
+        Ok(())
     }
 
-    fn collect_func_macro_invocation(&mut self, param_count: usize) -> Vec<Vec<Token>> {
+    fn collect_func_macro_invocation(
+        &mut self,
+        param_count: usize,
+        on_error: ErrorCallback,
+    ) -> ResultScope<Vec<Vec<Token>>> {
         let mut param_tokens = vec![Vec::new()];
         let mut paren_layers = 0usize;
         let mut in_preprocessor = false;
@@ -498,19 +510,23 @@ impl FrameStack {
                     }
                 },
                 _ if head.kind().is_preprocessor() => {
-                    // TODO: Print warning about preprocessors being undefined in func macro
+                    param_tokens.last_mut().unwrap().push(head.clone());
+                    let error = Error::FuncInvokePreprocessorInArgs(head.clone());
+                    self.report_error(error, on_error)?;
                     in_preprocessor = true;
+                    continue;
                 },
                 PreEnd => {
                     if in_preprocessor {
                         in_preprocessor = false;
+                        param_tokens.last_mut().unwrap().push(head.clone());
                     } else {
-                        // TODO: Print error about unfinished macro
+                        self.report_error(Error::InnerFuncInvokeUnfinished, on_error)?;
                         break;
                     }
                 },
                 Eof => {
-                    // TODO: Print error about unfinished macro
+                    self.report_error(Error::InnerFuncInvokeUnfinished, on_error)?;
                     break;
                 },
                 _ => {},
@@ -518,7 +534,19 @@ impl FrameStack {
 
             param_tokens.last_mut().unwrap().push(head.clone());
         }
-        param_tokens
+        Ok(param_tokens)
+    }
+
+    fn report_error(&self, kind: Error, on_error: ErrorCallback) -> ResultScope<()> {
+        let mut fatal = kind.severity().is_fatal();
+
+        fatal |= on_error(TravelerError { state: self.save_state(), kind });
+
+        if fatal {
+            Err(crate::c::ErrorScope::Fatal)
+        } else {
+            Ok(())
+        }
     }
     /// Returns whether the given macro_id is in the frame stack.
     fn in_macro(&self, macro_id: usize) -> bool {

@@ -5,11 +5,13 @@ use crate::{
         traveler::{
             FrameStack,
             MacroKind,
+            TravelerError,
             TravelerState,
         },
         CompileEnv,
         FileTokens,
         Keyword,
+        ResultScope,
         StringType,
         Token,
         TokenKind,
@@ -22,28 +24,37 @@ use crate::{
     },
 };
 
-pub struct Traveler {
+type Error = crate::c::traveler::TravelerErrorKind;
+
+pub struct Traveler<OnError>
+where OnError: FnMut(TravelerError) -> bool
+{
     env: Arc<CompileEnv>,
     frames: FrameStack,
     str_builder: StringBuilder,
+    on_error: OnError,
 }
 
-impl Traveler {
-    pub fn new(env: Arc<CompileEnv>) -> Traveler {
+impl<OnError> Traveler<OnError>
+where OnError: FnMut(TravelerError) -> bool
+{
+    pub fn new(env: Arc<CompileEnv>, on_error: OnError) -> Self {
         let frames = FrameStack::new(env.clone());
         // OPTIMIZATION: A different hasher may be more performant
         Traveler {
             env,
             frames,
             str_builder: StringBuilder::new(),
+            on_error,
         }
     }
 
-    pub fn load_start(&mut self, tokens: Arc<FileTokens>) {
+    pub fn load_start(&mut self, tokens: Arc<FileTokens>) -> ResultScope<()> {
         self.frames.load_start(tokens);
         // self.frames starts before the first token in the file.
         // This allows handling any preprocessor instructions at the start of the file.
-        self.move_forward();
+        self.move_forward()?;
+        Ok(())
     }
 
     pub fn save_state(&self) -> TravelerState {
@@ -58,89 +69,383 @@ impl Traveler {
         self.frames.head()
     }
 
-    pub fn move_forward(&mut self) -> &Token {
+    pub fn move_forward(&mut self) -> ResultScope<&Token> {
         self.frames.move_forward();
         loop {
             if self.frames.is_token_joiner_next() {
-                self.handle_joiner();
+                self.handle_joiner()?;
                 continue;
             }
 
             match *self.frames.head().kind() {
                 PreIf { link } => {
-                    self.handle_if(link);
+                    self.handle_if(link)?;
                 },
                 PreIfDef { link } => {
-                    self.handle_if_def(true, link);
+                    self.handle_if_def(true, link)?;
                 },
                 PreIfNDef { link } => {
-                    self.handle_if_def(false, link);
+                    self.handle_if_def(false, link)?;
                 },
                 PreElif { link } => {
                     if self.frames.should_chain_skip() {
                         self.frames.skip_to(link, true);
                     } else {
-                        self.handle_if(link);
+                        self.handle_if(link)?;
                     }
                 },
                 PreElse { link } => {
-                    if self.frames.should_chain_skip() {
+                    let should_chain_skip = self.frames.should_chain_skip();
+                    self.ensure_end_of_preprocessor(Error::ExtraTokensInElse)?;
+                    if should_chain_skip {
                         self.frames.skip_to(link, true);
-                    } else {
-                        self.ensure_end_of_preprocessor(true);
                     }
                 },
                 PreBlank => {
                     // Pre blank doesn't have a corresponding PreEnd
                     self.frames.move_forward();
                 },
-                PreEndIf => self.ensure_end_of_preprocessor(true),
-                PreDefine => self.handle_define(),
-                PreUndef => self.handle_undef(),
+                PreEndIf => self.ensure_end_of_preprocessor(Error::ExtraTokensInEndIf)?,
+                PreDefine => self.handle_define()?,
+                PreUndef => self.handle_undef()?,
                 PreLine => {
-                    // TODO: Report warning that line can't be supported
+                    self.report_error(Error::UnsupportableLinePreprocessor)?;
                     self.skip_past_preprocessor();
-                    eprintln!("#line cannot be supported");
                 },
-                PreInclude => self.handle_include(false),
-                PreIncludeNext => self.handle_include(true),
-                PreError => self.handle_message(true),
-                PreWarning => self.handle_message(false),
-                PreUnknown(ref _str) => {
-                    unimplemented!("TODO: Error")
+                PreInclude => self.handle_include(false)?,
+                PreIncludeNext => self.handle_include(true)?,
+                PreError => self.handle_message(true)?,
+                PreWarning => self.handle_message(false)?,
+                PreUnknown(ref str) => {
+                    let error = Error::UnknownPreprocessor(str.clone());
+                    self.report_error(error)?;
+                    self.skip_past_preprocessor();
                 },
-                PrePragma => unimplemented!("#pragma isn't implemented yet."),
+                PrePragma => {
+                    self.report_error(Error::Unimplemented("#pragma"))?;
+                    unreachable!();
+                },
                 Keyword(Keyword::Pragma, ..) => {
-                    unimplemented!("_Pragma isn't implemented yet.")
+                    self.report_error(Error::Unimplemented("_Pragma"))?;
+                    unreachable!();
                 },
                 ref token if token.is_definable() => {
                     let definable_id = token.get_definable_id();
                     if let Some(handle) = self.frames.should_handle_macro(definable_id) {
-                        self.frames.handle_macro(handle);
+                        self.frames.handle_macro(handle, &mut self.on_error)?;
                     } else {
                         break;
                     }
                 },
+                LexerError(index) => {
+                    let error = self.frames.get_current_file().errors()[index].clone();
+                    self.report_error(Error::LexerError(error))?;
+                    self.frames.move_forward();
+                },
                 Hash { .. } => {
-                    unimplemented!("# isn't implemented yet.")
+                    self.report_error(Error::StrayHash)?;
+                    self.frames.move_forward();
                 },
                 HashHash { .. } => {
-                    unimplemented!("## isn't implemented yet.")
+                    self.report_error(Error::StrayHashHash)?;
+                    self.frames.move_forward();
+                },
+                At => {
+                    self.report_error(Error::StrayAtSign)?;
+                    self.frames.move_forward();
+                },
+                Backslash => {
+                    self.report_error(Error::StrayBackslash)?;
+                    self.frames.move_forward();
                 },
                 // It would be nice to return here, but borrow checker.
                 _ => break,
             }
         }
 
-        self.frames.head()
+        Ok(self.frames.head())
     }
 
-    fn handle_joiner(&mut self) {
+    fn handle_if(&mut self, _link: usize) -> ResultScope<()> {
+        // TODO: This may be messy since it needs order-of-operations
+        self.report_error(Error::Unimplemented("#if directives"))?;
+        unreachable!("report_error should have returned an error");
+    }
+
+    fn handle_if_def(&mut self, if_def: bool, link: usize) -> ResultScope<()> {
+        let defined = match *self.frames.move_forward().kind() {
+            ref token if token.is_definable() => {
+                let macro_id = token.get_definable_id();
+                self.frames.has_macro(macro_id)
+            },
+            PreEnd => {
+                let result = self.report_error(Error::IfDefMissingId(if_def));
+                self.frames.skip_to(link, false);
+                return result;
+            },
+            _ => {
+                let error = Error::IfDefExpectedId(if_def, self.frames.head().clone());
+                let result = self.report_error(error);
+                self.frames.skip_to(link, false);
+                return result;
+            },
+        };
+
+        self.ensure_end_of_preprocessor(Error::ExtraTokensInIfDef(if_def))?;
+
+        if defined != if_def {
+            self.frames.skip_to(link, false);
+        }
+        Ok(())
+    }
+
+    fn handle_define(&mut self) -> ResultScope<()> {
+        let macro_id = match *self.frames.move_forward().kind() {
+            ref token if token.is_definable() => token.get_definable_id(),
+            PreEnd => {
+                let result = self.report_error(Error::DefineMissingId);
+                self.frames.move_forward();
+                return result;
+            },
+            _ => {
+                let error = Error::DefineExpectedId(self.frames.head().clone());
+                let result = self.report_error(error);
+                self.skip_past_preprocessor();
+                return result;
+            },
+        };
+
+        let head = self.frames.move_forward();
+        match *head.kind() {
+            PreEnd => {
+                // TODO: Ensure the previous macro was empty (otherwise report warning)
+                self.frames.add_macro(macro_id, MacroKind::Empty);
+                self.frames.move_forward();
+                Ok(())
+            },
+            LParen if !head.whitespace_before() => self.handle_function_macro(macro_id),
+            _ => self.handle_object_macro(macro_id),
+        }
+    }
+
+    fn handle_function_macro(&mut self, macro_id: usize) -> ResultScope<()> {
+        let mut params = Vec::new();
+        let mut var_arg = None;
+        loop {
+            match *self.frames.move_forward().kind() {
+                ref token if token.is_definable() => params.push(token.get_definable_id()),
+                DotDotDot => {
+                    var_arg = Some(self.env.cache().get_or_cache("__VA_ARGS__").uniq_id());
+                    self.frames.move_forward();
+                    break;
+                },
+                RParen => break,
+                PreEnd => {
+                    let result = self.report_error(Error::DefineFuncEndBeforeEndOfArgs);
+                    self.frames.move_forward();
+                    return result;
+                },
+                _ => {
+                    let error = Error::DefineFuncExpectedArg(self.frames.head().clone());
+                    let result = self.report_error(error);
+                    self.skip_past_preprocessor();
+                    return result;
+                },
+            }
+
+            match *self.frames.move_forward().kind() {
+                Comma => continue,
+                DotDotDot => {
+                    var_arg = Some(params.pop().unwrap());
+                    self.frames.move_forward();
+                    break;
+                },
+                RParen => break,
+                PreEnd => {
+                    let result = self.report_error(Error::DefineFuncEndBeforeEndOfArgs);
+                    self.frames.move_forward();
+                    return result;
+                },
+                _ => {
+                    let error = Error::DefineFuncExpectedSeparator(self.frames.head().clone());
+                    let result = self.report_error(error);
+                    self.skip_past_preprocessor();
+                    return result;
+                },
+            }
+        }
+
+        match *self.frames.head().kind() {
+            RParen => {
+                self.frames.move_forward();
+            },
+            _ => {
+                let error = Error::DefineFuncExpectedEndOfArgs(self.frames.head().clone());
+                let result = self.report_error(error);
+                self.skip_past_preprocessor();
+                return result;
+            },
+        }
+
+        let (file_id, index) = self.frames.get_file_index();
+        let length = self.skip_past_preprocessor();
+        self.frames.add_macro(macro_id, MacroKind::FuncMacro {
+            file_id,
+            index,
+            end: index + length,
+            param_ids: params,
+            var_arg,
+        });
+
+        Ok(())
+    }
+
+    fn handle_object_macro(&mut self, macro_id: usize) -> ResultScope<()> {
+        if matches!(
+            self.frames.preview_next_kind(false),
+            Some(&TokenKind::PreEnd)
+        ) {
+            // TODO: Ensure the previous macro is the same (otherwise report warning)
+            let token = self.frames.head().clone();
+            self.frames.add_macro(macro_id, MacroKind::SingleToken { token });
+            // Move onto the PreEnd token
+            self.frames.move_forward();
+            // Move past the PreEnd token
+            self.frames.move_forward();
+        } else {
+            let (file_id, index) = self.frames.get_file_index();
+            let length = self.skip_past_preprocessor();
+            // TODO: Ensure the previous macro was the same (otherwise report warning)
+            self.frames.add_macro(macro_id, MacroKind::ObjectMacro {
+                index,
+                file_id,
+                end: index + length,
+            });
+        }
+
+        Ok(())
+    }
+
+    fn handle_undef(&mut self) -> ResultScope<()> {
+        match *self.frames.move_forward().kind() {
+            ref token if token.is_definable() => {
+                let macro_id = token.get_definable_id();
+                self.frames.remove_macro(macro_id);
+            },
+            PreEnd => {
+                let result = self.report_error(Error::UndefMissingId);
+                self.frames.move_forward();
+                return result;
+            },
+            _ => {
+                let error = Error::UndefExpectedId(self.frames.head().clone());
+                let result = self.report_error(error);
+                self.skip_past_preprocessor();
+                return result;
+            },
+        };
+
+        self.ensure_end_of_preprocessor(Error::ExtraTokensInUndef)?;
+        Ok(())
+    }
+
+    fn handle_include(&mut self, _include_next: bool) -> ResultScope<()> {
+        // We use self.move_forward to allow for macros to be decoded.
+        let inc_file = match *self.move_forward()?.kind() {
+            IncludePath { ref path, inc_type } => {
+                let path = path.clone();
+                if let Some(inc_file) = self.frames.get_include_ref(&path) {
+                    inc_file
+                } else {
+                    let error = Error::IncludeNotFound(inc_type, path);
+                    let result = self.report_error(error);
+                    self.skip_past_preprocessor();
+                    return result;
+                }
+            },
+            String { .. } => {
+                self.report_error(Error::Unimplemented("Include indirection with quotes"))?;
+                unreachable!()
+            },
+            LAngle => {
+                self.report_error(Error::Unimplemented("Include indirection with <>"))?;
+                unreachable!()
+            },
+            PreEnd => {
+                let result = self.report_error(Error::IncludePathMissing);
+                self.frames.move_forward();
+                return result;
+            },
+            _ => {
+                let error = Error::IncludeExpectedPath(self.head().clone());
+                let result = self.report_error(error);
+                self.skip_past_preprocessor();
+                return result;
+            },
+        };
+
+        if !matches!(*self.frames.move_forward().kind(), PreEnd) {
+            self.report_error(Error::ExtraTokensInInclude)?;
+            while !matches!(*self.frames.move_forward().kind(), PreEnd) {}
+        }
+
+        if self.frames.push_include(inc_file).is_err() {
+            self.report_error(Error::MissingIncludeId(inc_file))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn handle_message(&mut self, is_error: bool) -> ResultScope<()> {
+        let state = self.save_state();
+        let message = match *self.frames.move_forward().kind() {
+            Message(ref text) => {
+                let text = text.clone();
+                // The next token *should* be a PreEnd token.
+                self.skip_past_preprocessor();
+                Some(text)
+            },
+            PreEnd => {
+                self.frames.move_forward();
+                None
+            },
+            _ => {
+                let error = Error::Unreachable(
+                    "Message preprocessor instructions should only be followed by Message or PreEnd token.",
+                );
+                self.report_error(error)?;
+                unreachable!()
+            },
+        };
+
+        let error_kind = if is_error {
+            Error::ErrorPreprocessor(message)
+        } else {
+            Error::WarningPreprocessor(message)
+        };
+
+        self.report_error_with_state(error_kind, state)
+    }
+
+    fn handle_joiner(&mut self) -> ResultScope<()> {
         self.str_builder.clear();
         let first_token = self.head().clone();
         let join_location = self.frames.move_forward().location().clone();
         let second_token = self.frames.move_forward().clone();
 
+        if let Some(joined) = self.attempt_join(&first_token, &second_token) {
+            let joined_token = Token::new(join_location, true, joined);
+            self.frames.push_token(joined_token);
+            Ok(())
+        } else {
+            // TODO: Make the recovery after this error better by having first_token get processed
+            // as if it wasn't joined. (Right now this just skips first_token straight to second_token).
+            let error = Error::InvalidJoin(first_token, join_location, second_token);
+            self.report_error(error)
+        }
+    }
+
+    fn attempt_join(&mut self, first_token: &Token, second_token: &Token) -> Option<TokenKind> {
         #[allow(clippy::pattern_type_mismatch)]
         let joined = match (first_token.kind(), second_token.kind()) {
             (LAngle, Colon) => LBracket { alt: true },
@@ -190,8 +495,7 @@ impl Traveler {
                         str_data: str_data.clone(),
                     }
                 } else {
-                    // TODO: Report that id was not a valid string prefix
-                    unimplemented!()
+                    return None;
                 }
             },
             (part1, part2) if part1.is_number_joinable_with(part2) => {
@@ -199,22 +503,18 @@ impl Traveler {
                 Number(digits)
             },
             (Number(digits), Plus | Minus) => {
-                match digits.string().as_bytes().last() {
-                    Some(b'e' | b'E' | b'p' | b'P') => {
-                        let digits = self.join_and_cache(
-                            digits.string(),
-                            if matches!(*second_token.kind(), Plus) {
-                                "+"
-                            } else {
-                                "-"
-                            },
-                        );
-                        Number(digits)
-                    },
-                    _ => {
-                        // TODO: Error about invalid token.
-                        return;
-                    },
+                if let Some(b'e' | b'E' | b'p' | b'P') = digits.string().as_bytes().last() {
+                    let digits = self.join_and_cache(
+                        digits.string(),
+                        if matches!(*second_token.kind(), Plus) {
+                            "+"
+                        } else {
+                            "-"
+                        },
+                    );
+                    Number(digits)
+                } else {
+                    return None;
                 }
             },
             (id1, id2) if id1.is_id_joinable_with(id2) => {
@@ -225,15 +525,9 @@ impl Traveler {
                     Identifier(cached)
                 }
             },
-            _ => {
-                // TODO: Error about invalid token.
-                return;
-            },
+            _ => return None,
         };
-
-        let joined_token = Token::new(join_location, true, joined);
-
-        self.frames.push_token(joined_token);
+        Some(joined)
     }
 
     fn join_and_cache(&mut self, s1: &str, s2: &str) -> CachedString {
@@ -244,259 +538,31 @@ impl Traveler {
         self.env.cache().get_or_cache(self.str_builder.current())
     }
 
-    fn handle_if(&mut self, _link: usize) {
-        // TODO: This may be messy since it needs order-of-operations
-        unimplemented!("TODO:")
-    }
-
-    fn handle_if_def(&mut self, if_def: bool, link: usize) {
-        let defined = match *self.frames.move_forward().kind() {
-            ref token if token.is_definable() => {
-                let macro_id = token.get_definable_id();
-                self.frames.has_macro(macro_id)
-            },
-            PreEnd => {
-                // TODO: Report missing identifier.
-                eprintln!("Missing identifier to ifdef/ifndef");
-                self.frames.skip_to(link, false);
-                return;
-            },
-            _ => {
-                // TODO: Report mis-match.
-                eprintln!("Expected identifier");
-                self.skip_past_preprocessor();
-                return;
-            },
-        };
-
-        if defined != if_def {
-            self.frames.skip_to(link, false);
-            return;
-        }
-
-        self.ensure_end_of_preprocessor(true);
-    }
-
-    fn handle_define(&mut self) {
-        let macro_id = match *self.frames.move_forward().kind() {
-            ref token if token.is_definable() => token.get_definable_id(),
-            PreEnd => {
-                // TODO: Report missing identifier.
-                eprintln!("Missing identifier to define");
-                self.frames.move_forward();
-                return;
-            },
-            _ => {
-                // TODO: Report mis-match.
-                eprintln!("Expected identifier to define");
-                self.skip_past_preprocessor();
-                return;
-            },
-        };
-
-        let head = self.frames.move_forward();
-        match *head.kind() {
-            PreEnd => {
-                // TODO: Ensure the previous macro was empty (otherwise report warning)
-                self.frames.add_macro(macro_id, MacroKind::Empty);
-                self.frames.move_forward();
-            },
-            LParen if !head.whitespace_before() => {
-                self.handle_function_macro(macro_id);
-            },
-            _ => {
-                self.handle_object_macro(macro_id);
-            },
-        }
-    }
-
-    fn handle_function_macro(&mut self, macro_id: usize) {
-        let mut params = Vec::new();
-        let mut var_arg = None;
-        loop {
-            match *self.frames.move_forward().kind() {
-                ref token if token.is_definable() => params.push(token.get_definable_id()),
-                DotDotDot => {
-                    var_arg = Some(self.env.cache().get_or_cache("__VA_ARGS__").uniq_id());
-                    self.move_forward();
-                    break;
-                },
-                RParen => break,
-                _ => {
-                    // TODO: Report token not valid in func macro params
-                    eprintln!("Invalid token in function macro parameters.");
-                    self.skip_past_preprocessor();
-                    return;
-                },
-            }
-
-            match *self.frames.move_forward().kind() {
-                Comma => continue,
-                DotDotDot => {
-                    var_arg = Some(params.pop().unwrap());
-                    self.move_forward();
-                    break;
-                },
-                RParen => break,
-                Identifier(_) => {
-                    // TODO: Report missing , or ) between parameters
-                    self.skip_past_preprocessor();
-                    return;
-                },
-                _ => {
-                    // TODO: Report token not valid in func macro params
-                    self.skip_past_preprocessor();
-                    return;
-                },
-            }
-        }
-
-        match *self.frames.head().kind() {
-            RParen => {
-                self.frames.move_forward();
-            },
-            Comma => {
-                // TODO: Report that ) must follow var-arg parameter. Cannot have another parameter.
-                self.skip_past_preprocessor();
-                return;
-            },
-            _ => {
-                // TODO: Report ) must follow var-arg parameter.
-                self.skip_past_preprocessor();
-                return;
-            },
-        }
-
-        let (file_id, index) = self.frames.get_file_index();
-        let length = self.skip_past_preprocessor();
-        self.frames.add_macro(macro_id, MacroKind::FuncMacro {
-            file_id,
-            index,
-            end: index + length,
-            param_ids: params,
-            var_arg,
-        });
-    }
-
-    fn handle_object_macro(&mut self, macro_id: usize) {
-        if matches!(
-            self.frames.preview_next_kind(false),
-            Some(&TokenKind::PreEnd)
-        ) {
-            // TODO: Ensure the previous macro is the same (otherwise report warning)
-            let token = self.frames.head().clone();
-            self.frames.add_macro(macro_id, MacroKind::SingleToken { token });
-            // Move onto the PreEnd token
-            self.frames.move_forward();
-            // Move past the PreEnd token
-            self.frames.move_forward();
-        } else {
-            let (file_id, index) = self.frames.get_file_index();
-            let length = self.skip_past_preprocessor();
-            // TODO: Ensure the previous macro was the same (otherwise report warning)
-            self.frames.add_macro(macro_id, MacroKind::ObjectMacro {
-                index,
-                file_id,
-                end: index + length,
-            });
-        }
-    }
-
-    fn handle_undef(&mut self) {
-        match *self.frames.move_forward().kind() {
-            ref token if token.is_definable() => {
-                let macro_id = token.get_definable_id();
-                self.frames.remove_macro(macro_id);
-            },
-            PreEnd => {
-                // TODO: Report missing identifier.
-                eprintln!("Missing identifier to undef");
-                self.frames.move_forward();
-                return;
-            },
-            _ => {
-                // TODO: Report mis-match.
-                eprintln!("Expected identifier to undef");
-                self.skip_past_preprocessor();
-                return;
-            },
-        };
-
-        self.ensure_end_of_preprocessor(true);
-    }
-
-    fn handle_include(&mut self, _include_next: bool) {
-        // We use self.move_forward to allow for macros to be decoded.
-        let inc_file = match *self.move_forward().kind() {
-            IncludePath { ref path, .. } => {
-                let path = path.clone();
-                self.ensure_end_of_preprocessor(false);
-                self.frames.get_include_ref(path)
-            },
-            String { ref str_data, .. } => {
-                // TODO:
-                eprintln!(
-                    "Indirection with quotes is not yet supported. Included: {}",
-                    str_data
-                );
-                self.ensure_end_of_preprocessor(true);
-                return;
-            },
-            LAngle => {
-                eprintln!("Indirection <> include is not supported currently.");
-                self.skip_past_preprocessor();
-                return;
-            },
-            PreEnd => {
-                // TODO: Report missing include
-                eprintln!("Missing include");
-                self.frames.move_forward();
-                return;
-            },
-            _ => {
-                // TODO: Report mis-match.
-                eprintln!("Expected include");
-                self.skip_past_preprocessor();
-                return;
-            },
-        };
-
-        if self.frames.push_include(inc_file).is_err() {
-            // TODO: Report missing include error.
-            eprintln!("Missing include. ID: {}", inc_file);
-        }
-    }
-
-    fn handle_message(&mut self, is_error: bool) {
-        match *self.frames.move_forward().kind() {
-            Message(ref text) => {
-                eprintln!(
-                    "{}: {}",
-                    if is_error { "ERROR " } else { "WARNING" },
-                    text
-                );
-                self.ensure_end_of_preprocessor(true);
-            },
-            PreEnd => {
-                // TODO: Report missing identifier.
-                eprintln!("Report error with no message");
-                self.skip_past_preprocessor();
-            },
-            _ => panic!(
-                "Message preprocessor instructions should only be followed by Message or EndPreprocessor."
-            ),
-        };
-    }
-
-    fn ensure_end_of_preprocessor(&mut self, move_past_end: bool) {
+    fn ensure_end_of_preprocessor(&mut self, error: Error) -> ResultScope<()> {
         if let PreEnd = *self.frames.move_forward().kind() {
-            if move_past_end {
-                self.frames.move_forward();
-            }
+            self.frames.move_forward();
+            Ok(())
         } else {
-            // TODO: Report extra token
-            eprintln!("Extra tokens");
+            let result = self.report_error(error);
             self.skip_past_preprocessor();
+            result
+        }
+    }
+
+    fn report_error(&mut self, v: Error) -> ResultScope<()> {
+        self.report_error_with_state(v, self.save_state())
+    }
+
+    fn report_error_with_state(&mut self, v: Error, state: TravelerState) -> ResultScope<()> {
+        let mut fatal = v.severity().is_fatal();
+        let error = TravelerError { kind: v, state };
+
+        fatal |= (self.on_error)(error);
+
+        if fatal {
+            Err(crate::c::ErrorScope::Fatal)
+        } else {
+            Ok(())
         }
     }
 

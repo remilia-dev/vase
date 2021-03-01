@@ -12,10 +12,10 @@ fn main() {
     let mut lexer = MultiLexer::new(env.clone());
     lexer.lex_multi_threaded(&*env.settings().source_files);
 
-    let mut traveler = Traveler::new(env.clone());
+    let mut traveler = Traveler::new(env.clone(), &|_| unimplemented!());
     let tokens = env.file_id_to_tokens()[0].clone();
     println!("{:#?}", tokens);
-    traveler.load_start(tokens);
+    traveler.load_start(tokens).unwrap();
 
     let mut tokens = Vec::new();
     loop {
@@ -23,7 +23,7 @@ fn main() {
             TokenKind::Eof => break,
             token => {
                 tokens.push(token.clone());
-                traveler.move_forward();
+                traveler.move_forward().unwrap();
             },
         }
     }
