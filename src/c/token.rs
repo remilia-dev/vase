@@ -1,5 +1,7 @@
 // Copyright 2021. remilia-dev
 // This source code is licensed under GPLv3 or any later version.
+use std::fmt;
+
 use crate::{
     c::FileId,
     sync::Arc,
@@ -267,12 +269,33 @@ impl TokenKind {
             & matches!(other, Identifier(..) | Keyword(..) | Number { .. })
     }
 
+    /// Gets the token's simple textual form.
+    /// # Panics
+    /// Panics if this token would require allocations to represent its textual form.
+    /// For example, a String token will panic because the quotes would need to be
+    /// added.
     pub fn text(&self) -> &str {
         use TokenKind::*;
         match *self {
+            Message(ref message) => message,
             Identifier(ref id) => id.string(),
             Keyword(keyword, ..) => keyword.text(),
             Number(ref digits) => digits.string(),
+            PreIf { .. } => "#if",
+            PreIfDef { .. } => "#ifdef",
+            PreIfNDef { .. } => "#ifndef",
+            PreElif { .. } => "#elif",
+            PreElse { .. } => "#else",
+            PreEndIf => "#endif",
+            PreDefine => "#define",
+            PreUndef => "#undefine",
+            PreLine => "#line",
+            PreError => "#error",
+            PrePragma => "#pragma",
+            PreBlank => "#",
+            PreInclude => "#include",
+            PreIncludeNext => "#include_next",
+            PreWarning => "#warning",
             LBracket { alt } => (if alt { "<:" } else { "[" }),
             RBracket { alt } => (if alt { ":>" } else { "]" }),
             LParen => "(",
@@ -356,6 +379,31 @@ impl TokenKind {
             | PreEndIf | PreDefine | PreUndef | PreLine | PreError | PrePragma | PreInclude // 2
             | PreUnknown(..) | PreIncludeNext | PreWarning // 3
         )
+    }
+}
+impl fmt::Display for TokenKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use TokenKind::*;
+        match *self {
+            IncludePath { inc_type, ref path } => {
+                if inc_type.check_relative() {
+                    write!(f, r#""{}""#, path)
+                } else {
+                    write!(f, "<{}>", path)
+                }
+            },
+            String { encoding, is_char, ref str_data, .. } => {
+                let prefix = encoding.prefix().unwrap_or("");
+                if is_char {
+                    write!(f, "{}'{}'", prefix, str_data)
+                } else {
+                    write!(f, r#"{}"{}""#, prefix, str_data)
+                }
+            },
+            PreUnknown(ref instr) => write!(f, "#{}", instr),
+            LexerError(..) | Eof | PreEnd => Ok(()),
+            _ => write!(f, "{}", self.text()),
+        }
     }
 }
 
@@ -500,6 +548,17 @@ pub enum StringEncoding {
     WChar,
     U16,
     U32,
+}
+impl StringEncoding {
+    pub fn prefix(self) -> Option<&'static str> {
+        match self {
+            Self::Default => None,
+            Self::U8 => Some("u8"),
+            Self::WChar => Some("L"),
+            Self::U16 => Some("u"),
+            Self::U32 => Some("U"),
+        }
+    }
 }
 
 #[cfg(test)]

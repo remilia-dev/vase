@@ -75,6 +75,10 @@ enum_with_properties! {
         FuncInvokePreprocessorInArgs(Token),
         #[values(Error, "TE363")]
         InnerFuncInvokeUnfinished,
+        #[values(Error, "TE364")]
+        StringifyExpectsId(Token),
+        #[values(Error, "TE365")]
+        StringifyNonParameter(Token),
         #[values(Error, "TE370")]
         InvalidJoin(Token, SourceLocation, Token),
         #[values(Error, "TE380")]

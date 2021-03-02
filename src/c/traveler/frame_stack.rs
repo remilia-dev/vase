@@ -451,6 +451,36 @@ impl FrameStack {
                 PreEnd if self.frames.len() == function_frame => {
                     break;
                 },
+                Hash { .. } if self.frames.len() == function_frame => {
+                    let location = head.location().clone();
+                    let define = match self.move_forward().kind() {
+                        token if token.is_definable() => token.get_definable_id(),
+                        _ => {
+                            let error = Error::StringifyExpectsId(self.head().clone());
+                            self.report_error(error, on_error)?;
+                            continue;
+                        },
+                    };
+
+                    let str_data = if let Some(string) = self.frames[0].stringify(define) {
+                        Arc::new(string.into_boxed_str())
+                    } else {
+                        let id_token = self.head().clone();
+                        let id = match *id_token.kind() {
+                            Identifier(ref id) => id.clone(),
+                            _ => self.env.cache().get_or_cache(id_token.kind().text()),
+                        };
+                        let error = Error::StringifyNonParameter(id_token);
+                        self.report_error(error, on_error)?;
+                        Arc::new(Box::from(id.string()))
+                    };
+                    tokens.push(Token::new(location, true, String {
+                        encoding: crate::c::StringEncoding::Default,
+                        has_escapes: false,
+                        is_char: false,
+                        str_data,
+                    }));
+                },
                 ref def if def.is_definable() && self.frames.len() == function_frame => {
                     let param_id = def.get_definable_id();
                     if let Some(handle) = self.frames[0].has_parameter(param_id) {

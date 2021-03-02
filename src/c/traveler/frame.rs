@@ -146,4 +146,23 @@ impl Frame {
             _ => None,
         }
     }
+
+    pub fn stringify(&self, param_id: usize) -> Option<String> {
+        use std::fmt::Write;
+        match *self {
+            Frame::TokenCollector { ref params, .. } => {
+                let mut buffer = String::new();
+                let params = params.get(&param_id)?;
+                for (i, param) in params.iter().enumerate() {
+                    if i != 0 && param.whitespace_before() {
+                        buffer.push(' ');
+                    }
+                    write!(buffer, "{}", param.kind())
+                        .expect("Formating a token *should* never fail.");
+                }
+                Some(buffer)
+            },
+            _ => None,
+        }
+    }
 }
