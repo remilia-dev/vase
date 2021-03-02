@@ -502,21 +502,6 @@ where OnError: FnMut(TravelerError) -> bool
                 let digits = self.join_and_cache(part1.text(), part2.text());
                 Number(digits)
             },
-            (Number(digits), Plus | Minus) => {
-                if let Some(b'e' | b'E' | b'p' | b'P') = digits.string().as_bytes().last() {
-                    let digits = self.join_and_cache(
-                        digits.string(),
-                        if matches!(*second_token.kind(), Plus) {
-                            "+"
-                        } else {
-                            "-"
-                        },
-                    );
-                    Number(digits)
-                } else {
-                    return None;
-                }
-            },
             (id1, id2) if id1.is_id_joinable_with(id2) => {
                 let cached = self.join_and_cache(id1.text(), id2.text());
                 if let Some(keyword) = self.env.cached_to_keywords().get(&cached) {

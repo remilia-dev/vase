@@ -251,18 +251,27 @@ impl TokenKind {
         }
     }
 
+    /// Is able to be joined using ## with another token to form a number.
     pub fn is_number_joinable_with(&self, other: &TokenKind) -> bool {
         use TokenKind::*;
         match *self {
             Dot => matches!(*other, Number { .. }),
-            Number { .. } => matches!(*other, Number { .. } | Identifier(..) | Dot),
+            Number(ref digits) => match *other {
+                Number { .. } | Identifier(..) | Dot => true,
+                Plus | Minus => matches!(
+                    digits.string().as_bytes().last(),
+                    Some(b'e' | b'E' | b'p' | b'P')
+                ),
+                _ => false,
+            },
             _ => false,
         }
     }
 
-    /// Is able to be joined using ## with another token that is id-joinable.
+    /// Is able to be joined using ## with another token to form an identifier
+    /// (or potentially a keyword).
     ///
-    /// For example `int ## ID` is joinable to produce the identifier `intId`.
+    /// For example `int ## ID` is joinable to produce the identifier `intID`.
     pub fn is_id_joinable_with(&self, other: &TokenKind) -> bool {
         use TokenKind::*;
         matches!(self, Identifier(..) | Keyword(..))
