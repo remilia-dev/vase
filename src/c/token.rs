@@ -55,8 +55,8 @@ pub enum TokenKind {
     Keyword(Keyword, usize),
     Number(CachedString),
     String {
-        str_type: StringType,
-        has_complex_escapes: bool,
+        encoding: StringEncoding,
+        has_escapes: bool,
         is_char: bool,
         str_data: Arc<Box<str>>,
     },
@@ -494,7 +494,7 @@ impl IncludeType {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
-pub enum StringType {
+pub enum StringEncoding {
     Default,
     U8,
     WChar,

@@ -2,7 +2,7 @@
 // This source code is licensed under GPLv3 or any later version.
 use vase::{
     c::{
-        StringType,
+        StringEncoding,
         TokenKind::*,
     },
     sync::Arc,
@@ -96,33 +96,33 @@ fn can_join_str_prefix() {
         "#],
         &[
             String {
-                str_type: StringType::Default,
+                encoding: StringEncoding::Default,
                 str_data: expected.clone(),
-                has_complex_escapes: false,
+                has_escapes: false,
                 is_char: false,
             },
             String {
-                str_type: StringType::U8,
+                encoding: StringEncoding::U8,
                 str_data: expected.clone(),
-                has_complex_escapes: false,
+                has_escapes: false,
                 is_char: false,
             },
             String {
-                str_type: StringType::U16,
+                encoding: StringEncoding::U16,
                 str_data: expected.clone(),
-                has_complex_escapes: false,
+                has_escapes: false,
                 is_char: false,
             },
             String {
-                str_type: StringType::U32,
+                encoding: StringEncoding::U32,
                 str_data: expected.clone(),
-                has_complex_escapes: false,
+                has_escapes: false,
                 is_char: false,
             },
             String {
-                str_type: StringType::WChar,
+                encoding: StringEncoding::WChar,
                 str_data: expected,
-                has_complex_escapes: false,
+                has_escapes: false,
                 is_char: false,
             },
         ],

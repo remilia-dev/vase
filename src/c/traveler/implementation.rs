@@ -12,7 +12,7 @@ use crate::{
         FileTokens,
         Keyword,
         ResultScope,
-        StringType,
+        StringEncoding,
         Token,
         TokenKind,
         TokenKind::*,
@@ -481,17 +481,17 @@ where OnError: FnMut(TravelerError) -> bool
             (
                 Identifier(ref id),
                 String {
-                    str_type: StringType::Default,
+                    encoding: StringEncoding::Default,
                     is_char,
-                    has_complex_escapes,
+                    has_escapes,
                     str_data,
                 },
             ) => {
                 if let Some(str_type) = self.env.cached_to_str_prefix().get(id) {
                     String {
-                        str_type: *str_type,
+                        encoding: *str_type,
                         is_char: *is_char,
-                        has_complex_escapes: *has_complex_escapes,
+                        has_escapes: *has_escapes,
                         str_data: str_data.clone(),
                     }
                 } else {

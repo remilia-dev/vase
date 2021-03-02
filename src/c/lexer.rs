@@ -162,7 +162,7 @@ impl<'a, OnInclude: IncludeCallback> LexerState<'a, OnInclude> {
                 '"' | '<' if matches!(self.mode, CLexerMode::Include { .. }) => {
                     self.lex_include(character)
                 },
-                '\'' | '"' => self.lex_string(StringType::Default, character == '\''),
+                '\'' | '"' => self.lex_string(StringEncoding::Default, character == '\''),
                 c if r"~!@#%^&*()[]{}-+=:;\|,.<>/?".contains(c) => self.lex_symbol(c),
                 c if c.is_ascii_digit() => self.lex_number(false, c),
                 c => self.lex_identifier(c),
@@ -407,36 +407,22 @@ impl<'a, OnInclude: IncludeCallback> LexerState<'a, OnInclude> {
         ))
     }
 
-    fn lex_string(&mut self, str_type: StringType, is_char: bool) {
+    fn lex_string(&mut self, encoding: StringEncoding, is_char: bool) {
         let opening_char = if is_char { '\'' } else { '"' };
         self.str_builder.clear();
 
         let mut ended_correctly = false;
-        let mut has_complex_escapes = false;
+        let mut has_escapes = false;
         while let Some(char) = self.reader.move_forward() {
             match char {
                 '\\' => {
-                    let simple_escape = match self.reader.move_forward() {
-                        Some('\'') => '\'',
-                        Some('"') => '"',
-                        Some('?') => '?',
-                        Some('\\') => '\\',
-                        Some('a') => '\x07',
-                        Some('b') => '\x08',
-                        Some('f') => '\x0C',
-                        Some('n') => '\n',
-                        Some('r') => '\r',
-                        Some('t') => '\t',
-                        Some('v') => '\x0B',
-                        Some(c) => {
-                            self.str_builder.append_ascii(b'\\');
-                            self.str_builder.append_char(c);
-                            has_complex_escapes = true;
-                            continue;
-                        },
-                        None => break,
-                    };
-                    self.str_builder.append_char(simple_escape);
+                    has_escapes = true;
+                    self.str_builder.append_ascii(b'\\');
+                    if let Some(c) = self.reader.move_forward() {
+                        self.str_builder.append_char(c);
+                    } else {
+                        break;
+                    }
                 },
                 '\n' => break,
                 c if c == opening_char => {
@@ -456,8 +442,8 @@ impl<'a, OnInclude: IncludeCallback> LexerState<'a, OnInclude> {
 
         self.add_token(TokenKind::String {
             str_data: Arc::new(self.str_builder.current_as_box()),
-            str_type,
-            has_complex_escapes,
+            encoding,
+            has_escapes,
             is_char,
         })
     }

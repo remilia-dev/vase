@@ -15,7 +15,7 @@ use crate::{
         IncludeType,
         Keyword,
         LangVersion,
-        StringType,
+        StringEncoding,
         TokenKind,
     },
     sync::{
@@ -34,7 +34,7 @@ pub struct CompileEnv {
     cache: StringCache,
     cached_to_keywords: HashMap<CachedString, Keyword>,
     cached_to_preprocessor: HashMap<CachedString, TokenKind>,
-    cached_to_str_prefix: HashMap<CachedString, StringType>,
+    cached_to_str_prefix: HashMap<CachedString, StringEncoding>,
     // OPTIMIZATION: Maybe OnceArray should operate on Arcs rather than boxes.
     file_id_to_tokens: OnceArray<Arc<FileTokens>>,
 }
@@ -69,7 +69,7 @@ impl CompileEnv {
     pub fn cached_to_preprocessor(&self) -> &HashMap<CachedString, TokenKind> {
         &self.cached_to_preprocessor
     }
-    pub fn cached_to_str_prefix(&self) -> &HashMap<CachedString, StringType> {
+    pub fn cached_to_str_prefix(&self) -> &HashMap<CachedString, StringEncoding> {
         &self.cached_to_str_prefix
     }
     pub fn file_id_to_tokens(&self) -> &OnceArray<Arc<FileTokens>> {
@@ -207,12 +207,12 @@ fn update_cache_maps(env: &mut CompileEnv) {
         map_preprocessor("warning", PreWarning);
     }
 
-    let mut map_str_prefix = |s: &str, str: StringType| {
+    let mut map_str_prefix = |s: &str, str: StringEncoding| {
         let cached = env.cache.get_or_cache(s);
         env.cached_to_str_prefix.insert(cached, str);
     };
-    map_str_prefix("u8", StringType::U8);
-    map_str_prefix("u", StringType::U16);
-    map_str_prefix("U", StringType::U32);
-    map_str_prefix("L", StringType::WChar);
+    map_str_prefix("u8", StringEncoding::U8);
+    map_str_prefix("u", StringEncoding::U16);
+    map_str_prefix("U", StringEncoding::U32);
+    map_str_prefix("L", StringEncoding::WChar);
 }
