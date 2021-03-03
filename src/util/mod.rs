@@ -26,7 +26,10 @@ pub use string_cache::{
     CachedStringData,
     StringCache,
 };
-pub use vase_macros::enum_with_properties;
+pub use vase_macros::{
+    create_intos,
+    enum_with_properties,
+};
 /// Memory utilities.
 pub mod mem;
 
