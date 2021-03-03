@@ -7,7 +7,6 @@ use std::path::Path;
 use crate::{
     c::{
         CompileEnv,
-        FileId,
         IncludeType,
         Lexer,
     },
@@ -17,7 +16,10 @@ use crate::{
         RwLockUpgradableReadGuard,
         WorkQueue,
     },
-    util::CachedString,
+    util::{
+        CachedString,
+        FileId,
+    },
 };
 
 pub struct MultiLexer {

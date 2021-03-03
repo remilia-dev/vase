@@ -15,7 +15,6 @@ use crate::{
             TravelerState,
         },
         CompileEnv,
-        FileId,
         FileTokens,
         ResultScope,
         Token,
@@ -23,7 +22,10 @@ use crate::{
         TokenKind::*,
     },
     sync::Arc,
-    util::CachedString,
+    util::{
+        CachedString,
+        FileId,
+    },
 };
 
 type Error = crate::c::TravelerErrorKind;

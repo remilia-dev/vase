@@ -10,12 +10,14 @@ use vase::{
     c::{
         CompileEnv,
         CompileSettings,
-        FileId,
         Lexer,
         TokenKind,
     },
     sync::Arc,
-    util::CachedString,
+    util::{
+        CachedString,
+        FileId,
+    },
 };
 
 fn new_env() -> Arc<CompileEnv> {

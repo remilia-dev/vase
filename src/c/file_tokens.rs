@@ -5,7 +5,6 @@ use std::path::Path;
 
 use crate::{
     c::{
-        FileId,
         LexerError,
         LexerErrorKind,
         Token,
@@ -14,6 +13,7 @@ use crate::{
     sync::Arc,
     util::{
         CachedString,
+        FileId,
         SourceLocation,
     },
 };

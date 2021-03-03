@@ -5,10 +5,10 @@ use std::collections::HashMap;
 use crate::{
     c::{
         traveler::MacroHandle,
-        FileId,
         Token,
     },
     sync::Arc,
+    util::FileId,
 };
 
 #[derive(Clone, Debug)]

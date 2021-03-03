@@ -9,7 +9,6 @@ use crate::{
     c::{
         token::*,
         CompileEnv,
-        FileId,
         FileReader,
         FileTokens,
         LexerError,
@@ -18,6 +17,7 @@ use crate::{
     sync::Arc,
     util::{
         CachedString,
+        FileId,
         SourceLocation,
         StringBuilder,
     },

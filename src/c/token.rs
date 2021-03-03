@@ -3,10 +3,10 @@
 use std::fmt;
 
 use crate::{
-    c::FileId,
     sync::Arc,
     util::{
         CachedString,
+        FileId,
         SourceLocation,
     },
 };
