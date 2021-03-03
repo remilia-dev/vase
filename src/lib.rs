@@ -16,7 +16,6 @@
 #![warn(clippy::match_wildcard_for_single_variants)]
 #![warn(clippy::pattern_type_mismatch)]
 #![warn(clippy::ptr_as_ptr)]
-#![warn(clippy::similar_names)]
 #![warn(clippy::too_many_lines)]
 #![warn(clippy::trivially_copy_pass_by_ref)]
 #![warn(clippy::useless_let_if_seq)]
