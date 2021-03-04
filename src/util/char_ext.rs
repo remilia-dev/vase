@@ -1,7 +1,9 @@
 // Copyright 2021. remilia-dev
 // This source code is licensed under GPLv3 or any later version.
 
-/// A trait that adds some extension methods to [char].
+/// A trait that adds some extension methods to [char] and [u8].
+///
+/// This trait cannot be implemented by other types.
 pub trait CharExt: private::Sealed {
     /// Returns true if the a char value is within the character range `'0'..='7'`.
     fn is_ascii_octdigit(&self) -> bool;
@@ -13,23 +15,6 @@ pub trait CharExt: private::Sealed {
     /// Attempts to decode a UTF-8 character from an array of bytes at a given offset.
     ///
     /// Should decoding fail, an error describing the problem will be returned.
-    fn decode_utf8(bytes: &[u8], index: usize) -> Result<DecodedChar, Utf8DecodeError>;
-}
-
-impl CharExt for char {
-    fn is_ascii_octdigit(&self) -> bool {
-        '0' <= *self && *self <= '7'
-    }
-
-    fn hexdigit_as_byte(&self) -> u8 {
-        match self {
-            '0'..='9' => *self as u8 - b'0',
-            'a'..='f' => (*self as u8 - b'a') + 10,
-            'A'..='F' => (*self as u8 - b'A') + 10,
-            _ => panic!("Non-hexadecimal character passed to hexdigit_as_byte."),
-        }
-    }
-
     fn decode_utf8(bytes: &[u8], offset: usize) -> Result<DecodedChar, Utf8DecodeError> {
         let first_byte = bytes[offset];
         let byte_count = first_byte.leading_ones() as usize;
@@ -104,6 +89,36 @@ impl CharExt for char {
         }
 
         Ok(DecodedChar { char: char_val, byte_count })
+    }
+}
+
+impl CharExt for char {
+    fn is_ascii_octdigit(&self) -> bool {
+        '0' <= *self && *self <= '7'
+    }
+
+    fn hexdigit_as_byte(&self) -> u8 {
+        match self {
+            '0'..='9' => *self as u8 - b'0',
+            'a'..='f' => (*self as u8 - b'a') + 10,
+            'A'..='F' => (*self as u8 - b'A') + 10,
+            _ => panic!("Non-hexadecimal character passed to hexdigit_as_byte."),
+        }
+    }
+}
+
+impl CharExt for u8 {
+    fn is_ascii_octdigit(&self) -> bool {
+        b'0' <= *self && *self <= b'7'
+    }
+
+    fn hexdigit_as_byte(&self) -> u8 {
+        match self {
+            b'0'..=b'9' => *self - b'0',
+            b'a'..=b'f' => (*self - b'a') + 10,
+            b'A'..=b'F' => (*self - b'A') + 10,
+            _ => panic!("Non-hexadecimal character passed to hexdigit_as_byte."),
+        }
     }
 }
 
@@ -213,6 +228,7 @@ impl DecodedChar {
 mod private {
     pub trait Sealed {}
     impl Sealed for char {}
+    impl Sealed for u8 {}
 }
 
 #[cfg(test)]
