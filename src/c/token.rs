@@ -554,7 +554,8 @@ impl IncludeType {
 pub enum StringEncoding {
     Default,
     U8,
-    WChar,
+    WChar16,
+    WChar32,
     U16,
     U32,
 }
@@ -563,7 +564,8 @@ impl StringEncoding {
         match self {
             Self::Default => None,
             Self::U8 => Some("u8"),
-            Self::WChar => Some("L"),
+            Self::WChar16 => Some("L"),
+            Self::WChar32 => Some("L"),
             Self::U16 => Some("u"),
             Self::U32 => Some("U"),
         }

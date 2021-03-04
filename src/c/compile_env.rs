@@ -207,6 +207,7 @@ fn update_cache_maps(env: &mut CompileEnv) {
         map_preprocessor("warning", PreWarning);
     }
 
+    let wchar_is_16_bytes = env.settings.wchar_is_16_bytes;
     let mut map_str_prefix = |s: &str, str: StringEncoding| {
         let cached = env.cache.get_or_cache(s);
         env.cached_to_str_prefix.insert(cached, str);
@@ -214,5 +215,9 @@ fn update_cache_maps(env: &mut CompileEnv) {
     map_str_prefix("u8", StringEncoding::U8);
     map_str_prefix("u", StringEncoding::U16);
     map_str_prefix("U", StringEncoding::U32);
-    map_str_prefix("L", StringEncoding::WChar);
+    if wchar_is_16_bytes {
+        map_str_prefix("L", StringEncoding::WChar16);
+    } else {
+        map_str_prefix("L", StringEncoding::WChar32);
+    }
 }

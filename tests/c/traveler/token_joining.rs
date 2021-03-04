@@ -120,7 +120,7 @@ fn can_join_str_prefix() {
                 is_char: false,
             },
             String {
-                encoding: StringEncoding::WChar,
+                encoding: StringEncoding::WChar32,
                 str_data: expected,
                 has_escapes: false,
                 is_char: false,

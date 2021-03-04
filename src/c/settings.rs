@@ -9,6 +9,7 @@ pub struct CompileSettings {
     pub system_includes: Vec<Box<Path>>,
     pub local_includes: Vec<Box<Path>>,
     pub source_files: Vec<Arc<Path>>,
+    pub wchar_is_16_bytes: bool,
 }
 
 impl CompileSettings {}
@@ -20,6 +21,7 @@ impl Default for CompileSettings {
             system_includes: Vec::new(),
             local_includes: Vec::new(),
             source_files: Vec::new(),
+            wchar_is_16_bytes: false,
         };
         // TODO: Make include path generic for the OS.
         res.system_includes.push(Box::from(Path::new("/usr/local/include")));
