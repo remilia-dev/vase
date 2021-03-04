@@ -1,5 +1,6 @@
 // Copyright 2021. remilia-dev
 // This source code is licensed under GPLv3 or any later version.
+use std::marker::PhantomPinned;
 use std::mem::swap;
 use std::ptr::{
     null_mut,
@@ -81,10 +82,14 @@ pub struct CachedStringData {
     // OPTIMIZATION: We could store the str in the struct rather than needlessly boxing it.
     // It's not like CachedStringData should *ever* be on the stack.
     string: Box<str>,
+    _pin: PhantomPinned,
 }
 impl CachedStringData {
     fn new(value: &str) -> Self {
-        CachedStringData { string: Box::from(value) }
+        CachedStringData {
+            string: Box::from(value),
+            _pin: PhantomPinned,
+        }
     }
     /// Gets the string this data represents.
     pub fn string(&self) -> &str {
