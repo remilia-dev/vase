@@ -133,6 +133,16 @@ impl std::fmt::Debug for CachedStringData {
         )
     }
 }
+impl AsRef<[u8]> for CachedStringData {
+    fn as_ref(&self) -> &[u8] {
+        self.string.as_bytes()
+    }
+}
+impl AsRef<str> for CachedStringData {
+    fn as_ref(&self) -> &str {
+        &self.string
+    }
+}
 
 #[derive(Copy, Clone)]
 struct CacheRequest<'a> {
