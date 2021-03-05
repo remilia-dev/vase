@@ -1,5 +1,6 @@
 // Copyright 2021. remilia-dev
 // This source code is licensed under GPLv3 or any later version.
+use std::convert::TryFrom;
 use std::fmt;
 
 use crate::{
@@ -388,6 +389,10 @@ impl TokenKind {
             | PreEndIf | PreDefine | PreUndef | PreLine | PreError | PrePragma | PreInclude // 2
             | PreUnknown(..) | PreIncludeNext | PreWarning // 3
         )
+    }
+
+    pub fn is_binary_op(&self) -> bool {
+        crate::c::ast::BinaryOp::try_from(self).is_ok()
     }
 }
 impl fmt::Display for TokenKind {

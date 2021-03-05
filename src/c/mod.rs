@@ -14,8 +14,7 @@ pub use settings::*;
 pub use token::*;
 pub use traveler::*;
 
-pub type FileId = u32;
-
+pub mod ast;
 mod compile_env;
 mod error;
 mod error_scope;
