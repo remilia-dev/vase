@@ -6,6 +6,7 @@
 #![feature(maybe_uninit_uninit_array)]
 // Allows for some cleaner match code
 #![feature(or_patterns)]
+#![feature(destructuring_assignment)]
 // Required for sensible generics
 #![feature(trait_alias)]
 // The following warnings have been added since they work with the project and have good justifications.

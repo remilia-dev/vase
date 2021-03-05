@@ -5,15 +5,6 @@ pub use char_ext::{
     DecodedChar,
     Utf8DecodeError,
 };
-pub use num_parsing::{
-    parse_int,
-    parse_real,
-    NumBase,
-    ParsableInt,
-    ParsableReal,
-    ParseNumberError,
-    ParsedNumber,
-};
 pub use ptr_equality::PtrEquality;
 pub use severity::Severity;
 pub use source_location::{
@@ -34,7 +25,6 @@ pub use vase_macros::{
 pub mod mem;
 
 mod char_ext;
-mod num_parsing;
 mod ptr_equality;
 mod severity;
 mod source_location;
