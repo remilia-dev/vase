@@ -22,6 +22,7 @@
 #![warn(clippy::useless_let_if_seq)]
 
 pub mod c;
+pub mod error;
 pub mod math;
 pub mod sync;
 #[cfg(test)]

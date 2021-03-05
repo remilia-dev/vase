@@ -7,6 +7,7 @@ use crate::{
         ResultScope,
         StringEncoding,
     },
+    error::Severity,
     math::{
         Integer,
         NumBase,
@@ -17,7 +18,6 @@ use crate::{
         create_intos,
         enum_with_properties,
         CharExt,
-        Severity,
         SourceLocation,
     },
 };

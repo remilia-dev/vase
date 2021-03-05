@@ -12,13 +12,13 @@ use crate::{
         Token,
         TravelerState,
     },
+    error::Severity,
     math::Sign,
     sync::Arc,
     util::{
         enum_with_properties,
         CachedString,
         FileId,
-        Severity,
         SourceLocation,
     },
 };
