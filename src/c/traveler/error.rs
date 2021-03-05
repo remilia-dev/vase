@@ -2,11 +2,17 @@
 // This source code is licensed under GPLv3 or any later version.
 use crate::{
     c::{
+        ast::{
+            BinaryExpr,
+            LiteralError,
+            PrefixExpr,
+        },
         IncludeType,
         LexerError,
         Token,
         TravelerState,
     },
+    math::Sign,
     sync::Arc,
     util::{
         enum_with_properties,
@@ -29,6 +35,8 @@ enum_with_properties! {
         // == Others
         #[values(v0.severity(), v0.code())]
         LexerError(LexerError),
+        #[values(v0.severity(), v0.code())]
+        LiteralError(LiteralError),
         // == Internals
         #[values(Internal, "TI900")]
         Unimplemented(&'static str),
@@ -44,7 +52,22 @@ enum_with_properties! {
         IfDefMissingId(bool),
         #[values(Error, "TE301")]
         IfDefExpectedId(bool, Token),
-        // TE310 is reserved for #if and #elif
+        #[values(Error, "TE310")]
+        IfExpectedAtom(bool, Token),
+        #[values(Error, "TE311")]
+        IfExpectedOp(bool, Token),
+        #[values(Error, "TE312")]
+        IfDefinedNotDefinable(bool, Token),
+        #[values(Error, "TE313")]
+        IfDefinedExpectedRParen(bool, Token),
+        #[values(Error, "TE314")]
+        IfExpectedRParen(bool, Token),
+        #[values(Error, "TE315")]
+        IfTernaryExpectedColon(bool, Token),
+        #[values(Error, "TE316")]
+        IfDiv0(Sign, Box<BinaryExpr>),
+        #[values(Error, "TE317")]
+        IfReal(bool, Token),
         #[values(Error, "TE320")]
         DefineMissingId,
         #[values(Error, "TE331")]
@@ -102,6 +125,16 @@ enum_with_properties! {
         ExtraTokensInUndef,
         #[values(Warning, "TW204")]
         ExtraTokensInInclude,
+        #[values(Warning, "TW210")]
+        CommaInIfCondition,
+        #[values(Warning, "TW211")]
+        OverflowInIfBinary(i64, i64, Box<BinaryExpr>),
+        #[values(Warning, "TW212")]
+        OverflowInIfNegation(i64, Box<PrefixExpr>),
+        #[values(Warning, "TW213")]
+        NegativeSignedToUnsigned(bool, i64, Box<BinaryExpr>),
+        #[values(Warning, "TW214")]
+        ShiftedToMuch(Sign, Sign, Box<BinaryExpr>),
         #[values(Warning, "TW280")]
         WarningPreprocessor(Option<Arc<Box<str>>>),
         #[values(Warning, "TW299")]

@@ -4,11 +4,14 @@ use crate::{
     c::{
         traveler::{
             FrameStack,
+            IfEvaluator,
+            IfParser,
             MacroKind,
             TravelerError,
             TravelerState,
         },
         CompileEnv,
+        ErrorScope,
         FileTokens,
         Keyword,
         ResultScope,
@@ -29,8 +32,8 @@ type Error = crate::c::traveler::TravelerErrorKind;
 pub struct Traveler<OnError>
 where OnError: FnMut(TravelerError) -> bool
 {
-    env: Arc<CompileEnv>,
-    frames: FrameStack,
+    pub(super) env: Arc<CompileEnv>,
+    pub(super) frames: FrameStack,
     str_builder: StringBuilder,
     on_error: OnError,
 }
@@ -79,7 +82,7 @@ where OnError: FnMut(TravelerError) -> bool
 
             match *self.frames.head().kind() {
                 PreIf { link } => {
-                    self.handle_if(link)?;
+                    self.handle_if(true, link)?;
                 },
                 PreIfDef { link } => {
                     self.handle_if_def(true, link)?;
@@ -91,7 +94,7 @@ where OnError: FnMut(TravelerError) -> bool
                     if self.frames.should_chain_skip() {
                         self.frames.skip_to(link, true);
                     } else {
-                        self.handle_if(link)?;
+                        self.handle_if(false, link)?;
                     }
                 },
                 PreElse { link } => {
@@ -166,10 +169,27 @@ where OnError: FnMut(TravelerError) -> bool
         Ok(self.frames.head())
     }
 
-    fn handle_if(&mut self, _link: usize) -> ResultScope<()> {
-        // TODO: This may be messy since it needs order-of-operations
-        self.report_error(Error::Unimplemented("#if directives"))?;
-        unreachable!("report_error should have returned an error");
+    fn handle_if(&mut self, is_if: bool, link: usize) -> ResultScope<()> {
+        self.frames.move_forward();
+        let mut expr = match IfParser::create_and_parse(self, is_if) {
+            Ok(expr) => expr,
+            Err(ErrorScope::Block) => {
+                // We failed to parse the if condition, so we assume it's false.
+                self.frames.skip_to(link, false);
+                return Ok(());
+            },
+            Err(ErrorScope::Fatal) => return Err(ErrorScope::Fatal),
+        };
+        // Move past the PreEnd token.
+        self.move_forward()?;
+        match IfEvaluator::calc(&mut expr, |err| self.report_error(err)) {
+            Ok(true) => Ok(()),
+            Ok(false) | Err(ErrorScope::Block) => {
+                self.frames.skip_to(link, false);
+                Ok(())
+            },
+            Err(ErrorScope::Fatal) => Err(ErrorScope::Fatal),
+        }
     }
 
     fn handle_if_def(&mut self, if_def: bool, link: usize) -> ResultScope<()> {
@@ -534,7 +554,7 @@ where OnError: FnMut(TravelerError) -> bool
         }
     }
 
-    fn report_error(&mut self, v: Error) -> ResultScope<()> {
+    pub(super) fn report_error(&mut self, v: Error) -> ResultScope<()> {
         self.report_error_with_state(v, self.save_state())
     }
 
