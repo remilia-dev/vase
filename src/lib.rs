@@ -21,6 +21,7 @@
 #![warn(clippy::useless_let_if_seq)]
 
 pub mod c;
+pub mod math;
 pub mod sync;
 #[cfg(test)]
 pub mod test_utils;
