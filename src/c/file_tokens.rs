@@ -50,7 +50,7 @@ impl FileTokens {
     where T: Into<LexerErrorKind> {
         let mut this = FileTokens::new(file_id, path);
         let location = SourceLocation::new_first_byte(file_id);
-        this.add_error_token(LexerError::new(location, error.into()));
+        this.add_error_token(LexerError { location, kind: error.into() });
         this.append(Token::new_first_byte(file_id, TokenKind::Eof));
         this.finalize();
         this
@@ -68,7 +68,7 @@ impl FileTokens {
 
     pub fn add_error_token(&mut self, error: LexerError) {
         let index = self.errors.len();
-        let location = error.location().clone();
+        let location = error.location.clone();
         self.errors.push(error);
         let error_token = Token::new(location, false, TokenKind::LexerError(index));
         self.append(error_token);

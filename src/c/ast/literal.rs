@@ -7,7 +7,10 @@ use crate::{
         ResultScope,
         StringEncoding,
     },
-    error::Severity,
+    error::{
+        CodedError,
+        Severity,
+    },
     math::{
         Integer,
         NumBase,
@@ -117,28 +120,34 @@ enum_with_properties! {
     #[derive(Clone, Debug)]
     pub enum LiteralError {
         // == Errors
-        #[values(Error, "LiE300")]
+        #[values(Error, 600)]
         EmptyNumber,
-        #[values(Error, "LiE301")]
+        #[values(Error, 601)]
         EmptyExponent,
-        #[values(Error, "LiE302")]
+        #[values(Error, 602)]
         InvalidIntSuffix(Box<[u8]>),
-        #[values(Error, "LiE303")]
+        #[values(Error, 603)]
         InvalidRealSuffix(Box<[u8]>),
         // == Warnings
-        #[values(Warning, "LiW200")]
+        #[values(Warning, 300)]
         OverflowOccured(bool),
-        #[values(Warning, "LiW201")]
+        #[values(Warning, 301)]
         ExcessPrecision(u32),
     }
 
-    impl LiteralError {
+    impl CodedError for LiteralError {
         #[property]
-        pub fn severity(&self) -> Severity {
+        fn severity(&self) -> Severity {
             use Severity::*;
         }
         #[property]
-        pub fn code(&self) -> &'static str {}
+        fn code_number(&self) -> u32 {}
+
+        fn code_prefix(&self) -> &'static str {
+            // NOTE: The lexer prefix is use since these errors are lexical in nature.
+            // The code numbers for this error should be unique with respect to LexerError.
+            "C-L"
+        }
     }
 }
 

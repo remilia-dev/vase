@@ -329,7 +329,10 @@ impl<'a, OnInclude: IncludeCallback> LexerState<'a, OnInclude> {
                 Some(index) => self.tokens[index].kind_mut().set_link(curr_index),
                 None => {
                     let location = self.source_location();
-                    let error = LexerError::new(location, LexerErrorKind::MissingCorrespondingIf);
+                    let error = LexerError {
+                        kind: LexerErrorKind::MissingCorrespondingIf,
+                        location,
+                    };
                     self.tokens.add_error_token(error);
                 },
             }
@@ -374,7 +377,10 @@ impl<'a, OnInclude: IncludeCallback> LexerState<'a, OnInclude> {
 
         if !correctly_ended {
             let location = self.reader.location();
-            let error = LexerError::new(location, LexerErrorKind::UnendedInclude);
+            let error = LexerError {
+                kind: LexerErrorKind::UnendedInclude,
+                location,
+            };
             self.tokens.add_error_token(error);
         }
 
@@ -436,7 +442,10 @@ impl<'a, OnInclude: IncludeCallback> LexerState<'a, OnInclude> {
 
         if !ended_correctly {
             let location = self.reader.location();
-            let error = LexerError::new(location, super::LexerErrorKind::UnendedString);
+            let error = LexerError {
+                kind: LexerErrorKind::UnendedString,
+                location,
+            };
             self.tokens.add_error_token(error);
         }
 
@@ -501,7 +510,10 @@ impl<'a, OnInclude: IncludeCallback> LexerState<'a, OnInclude> {
                 None => {
                     if multi_line {
                         let location = self.reader.location();
-                        let error = LexerError::new(location, LexerErrorKind::UnendedComment);
+                        let error = LexerError {
+                            kind: LexerErrorKind::UnendedComment,
+                            location,
+                        };
                         self.tokens.add_error_token(error);
                     }
                     return;

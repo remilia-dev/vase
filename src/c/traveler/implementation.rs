@@ -559,6 +559,7 @@ where OnError: FnMut(TravelerError) -> bool
     }
 
     fn report_error_with_state(&mut self, v: Error, state: TravelerState) -> ResultScope<()> {
+        use crate::error::CodedError;
         let mut fatal = v.severity().is_fatal();
         let error = TravelerError { kind: v, state };
 

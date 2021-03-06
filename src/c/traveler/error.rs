@@ -12,7 +12,10 @@ use crate::{
         Token,
         TravelerState,
     },
-    error::Severity,
+    error::{
+        CodedError,
+        Severity,
+    },
     math::Sign,
     sync::Arc,
     util::{
@@ -29,124 +32,146 @@ pub struct TravelerError {
     pub kind: TravelerErrorKind,
 }
 
+impl CodedError for TravelerError {
+    fn severity(&self) -> Severity {
+        self.kind.severity()
+    }
+
+    fn code_number(&self) -> u32 {
+        self.kind.code_number()
+    }
+
+    fn code_prefix(&self) -> &'static str {
+        self.kind.code_prefix()
+    }
+}
+
 enum_with_properties! {
     #[derive(Clone, Debug)]
     pub enum TravelerErrorKind {
         // == Others
-        #[values(v0.severity(), v0.code())]
+        #[values(v0.severity(), v0.code_number())]
         LexerError(LexerError),
-        #[values(v0.severity(), v0.code())]
+        #[values(v0.severity(), v0.code_number())]
         LiteralError(LiteralError),
         // == Internals
-        #[values(Internal, "TI900")]
+        #[values(Internal, 900)]
         Unimplemented(&'static str),
-        #[values(Internal, "TI901")]
+        #[values(Internal, 901)]
         Unreachable(&'static str),
-        #[values(Internal, "TI902")]
+        #[values(Internal, 902)]
         MissingIncludeId(FileId),
         // == Fatals
-        #[values(Error, "TF490")]
+        #[values(Error, 800)]
         ErrorPreprocessor(Option<Arc<Box<str>>>),
         // == Errors
-        #[values(Error, "TE300")]
+        #[values(Error, 500)]
         IfDefMissingId(bool),
-        #[values(Error, "TE301")]
+        #[values(Error, 501)]
         IfDefExpectedId(bool, Token),
-        #[values(Error, "TE310")]
+        #[values(Error, 510)]
         IfExpectedAtom(bool, Token),
-        #[values(Error, "TE311")]
+        #[values(Error, 511)]
         IfExpectedOp(bool, Token),
-        #[values(Error, "TE312")]
+        #[values(Error, 512)]
         IfDefinedNotDefinable(bool, Token),
-        #[values(Error, "TE313")]
+        #[values(Error, 513)]
         IfDefinedExpectedRParen(bool, Token),
-        #[values(Error, "TE314")]
+        #[values(Error, 514)]
         IfExpectedRParen(bool, Token),
-        #[values(Error, "TE315")]
+        #[values(Error, 515)]
         IfTernaryExpectedColon(bool, Token),
-        #[values(Error, "TE316")]
+        #[values(Error, 516)]
         IfDiv0(Sign, Box<BinaryExpr>),
-        #[values(Error, "TE317")]
+        #[values(Error, 517)]
         IfReal(bool, Token),
-        #[values(Error, "TE320")]
+        #[values(Error, 530)]
         DefineMissingId,
-        #[values(Error, "TE331")]
+        #[values(Error, 531)]
         DefineExpectedId(Token),
-        #[values(Error, "TE332")]
+        #[values(Error, 532)]
         DefineFuncEndBeforeEndOfArgs,
-        #[values(Error, "TE333")]
+        #[values(Error, 533)]
         DefineFuncExpectedArg(Token),
-        #[values(Error, "TE334")]
+        #[values(Error, 534)]
         DefineFuncExpectedSeparator(Token),
-        #[values(Error, "TE335")]
+        #[values(Error, 535)]
         DefineFuncExpectedEndOfArgs(Token),
-        #[values(Error, "TE340")]
+        #[values(Error, 540)]
         UndefMissingId,
-        #[values(Error, "TE341")]
+        #[values(Error, 541)]
         UndefExpectedId(Token),
-        #[values(Error, "TE350")]
+        #[values(Error, 550)]
         IncludePathMissing,
-        #[values(Error, "TE351")]
+        #[values(Error, 551)]
         IncludeExpectedPath(Token),
-        #[values(Error, "TE352")]
+        #[values(Error, 552)]
         IncludeNotFound(IncludeType, CachedString),
-        #[values(Error, "TE360")]
+        #[values(Error, 560)]
         FuncInvokeMissingArgs(usize),
-        #[values(Error, "TE361")]
+        #[values(Error, 561)]
         FuncInvokeExcessParameters(Vec<Token>),
-        #[values(Error, "TE362")]
+        #[values(Error, 562)]
         FuncInvokePreprocessorInArgs(Token),
-        #[values(Error, "TE363")]
+        #[values(Error, 563)]
         InnerFuncInvokeUnfinished,
-        #[values(Error, "TE364")]
+        #[values(Error, 564)]
         StringifyExpectsId(Token),
-        #[values(Error, "TE365")]
+        #[values(Error, 565)]
         StringifyNonParameter(Token),
-        #[values(Error, "TE370")]
+        #[values(Error, 570)]
         InvalidJoin(Token, SourceLocation, Token),
-        #[values(Error, "TE380")]
+        #[values(Error, 580)]
         StrayHash,
-        #[values(Error, "TE381")]
+        #[values(Error, 581)]
         StrayHashHash,
-        #[values(Error, "TE382")]
+        #[values(Error, 582)]
         StrayAtSign,
-        #[values(Error, "TE383")]
+        #[values(Error, 583)]
         StrayBackslash,
-        #[values(Error, "TE390")]
+        #[values(Error, 590)]
         UnknownPreprocessor(CachedString),
         // == Warning
-        #[values(Warning, "TW200")]
+        #[values(Warning, 200)]
         ExtraTokensInIfDef(bool),
-        #[values(Warning, "TW201")]
+        #[values(Warning, 201)]
         ExtraTokensInElse,
-        #[values(Warning, "TW202")]
+        #[values(Warning, 202)]
         ExtraTokensInEndIf,
-        #[values(Warning, "TW203")]
+        #[values(Warning, 203)]
         ExtraTokensInUndef,
-        #[values(Warning, "TW204")]
+        #[values(Warning, 204)]
         ExtraTokensInInclude,
-        #[values(Warning, "TW210")]
+        #[values(Warning, 210)]
         CommaInIfCondition,
-        #[values(Warning, "TW211")]
+        #[values(Warning, 211)]
         OverflowInIfBinary(i64, i64, Box<BinaryExpr>),
-        #[values(Warning, "TW212")]
+        #[values(Warning, 212)]
         OverflowInIfNegation(i64, Box<PrefixExpr>),
-        #[values(Warning, "TW213")]
+        #[values(Warning, 213)]
         NegativeSignedToUnsigned(bool, i64, Box<BinaryExpr>),
-        #[values(Warning, "TW214")]
+        #[values(Warning, 214)]
         ShiftedToMuch(Sign, Sign, Box<BinaryExpr>),
-        #[values(Warning, "TW280")]
+        #[values(Warning, 280)]
         WarningPreprocessor(Option<Arc<Box<str>>>),
-        #[values(Warning, "TW299")]
+        #[values(Warning, 299)]
         UnsupportableLinePreprocessor,
     }
 
-    impl TravelerErrorKind {
+    impl CodedError for TravelerErrorKind {
         #[property]
-        pub fn severity(&self) -> Severity {
+        fn severity(&self) -> Severity {
             use Severity::*;
         }
         #[property]
-        pub fn code(&self) -> &'static str {}
+        fn code_number(&self) -> u32 {}
+
+        fn code_prefix(&self) -> &'static str {
+            match *self {
+                Self::LexerError(ref error) => error.code_prefix(),
+                Self::LiteralError(ref error) => error.code_prefix(),
+                _ => "C-T",
+            }
+        }
     }
 }

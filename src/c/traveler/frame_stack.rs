@@ -570,6 +570,7 @@ impl FrameStack {
     }
 
     fn report_error(&self, kind: Error, on_error: ErrorCallback) -> ResultScope<()> {
+        use crate::error::CodedError;
         let mut fatal = kind.severity().is_fatal();
 
         fatal |= on_error(TravelerError { state: self.save_state(), kind });
