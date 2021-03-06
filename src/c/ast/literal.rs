@@ -3,12 +3,10 @@
 use std::convert::TryFrom;
 
 use crate::{
-    c::{
-        ResultScope,
-        StringEncoding,
-    },
+    c::StringEncoding,
     error::{
         CodedError,
+        MayUnwind,
         Severity,
     },
     math::{
@@ -60,7 +58,7 @@ impl LiteralKind {
         }
     }
 
-    pub fn from_number<D, E>(digits: D, on_error: E) -> ResultScope<LiteralKind>
+    pub fn from_number<D, E>(digits: D, on_error: E) -> MayUnwind<LiteralKind>
     where
         D: AsRef<[u8]>,
         E: OnLiteralError,
@@ -72,7 +70,7 @@ impl LiteralKind {
         chars: C,
         _encoding: StringEncoding,
         _on_error: E,
-    ) -> ResultScope<LiteralKind>
+    ) -> MayUnwind<LiteralKind>
     where
         C: AsRef<str>,
         E: OnLiteralError,
@@ -115,7 +113,7 @@ impl LiteralKind {
     }
 }
 
-pub trait OnLiteralError = FnMut(LiteralError) -> ResultScope<()>;
+pub trait OnLiteralError = FnMut(LiteralError) -> MayUnwind<()>;
 enum_with_properties! {
     #[derive(Clone, Debug)]
     pub enum LiteralError {
@@ -163,7 +161,7 @@ struct LiteralDecoder<'a, E: OnLiteralError> {
 }
 
 impl<'a, E: OnLiteralError> LiteralDecoder<'a, E> {
-    fn create_and_calc(number: &'a [u8], on_error: E) -> ResultScope<LiteralKind> {
+    fn create_and_calc(number: &'a [u8], on_error: E) -> MayUnwind<LiteralKind> {
         Self::new(number, on_error).calc_number()
     }
 
@@ -223,7 +221,7 @@ impl<'a, E: OnLiteralError> LiteralDecoder<'a, E> {
         }
     }
 
-    fn calc_number(&mut self) -> ResultScope<LiteralKind> {
+    fn calc_number(&mut self) -> MayUnwind<LiteralKind> {
         let suffix = self.decode_suffix()?;
 
         match suffix {
@@ -276,7 +274,7 @@ impl<'a, E: OnLiteralError> LiteralDecoder<'a, E> {
         }
     }
 
-    fn decode_suffix(&mut self) -> ResultScope<SuffixType> {
+    fn decode_suffix(&mut self) -> MayUnwind<SuffixType> {
         if self.has_dot || self.exp_base.is_some() {
             match self.suffix {
                 b"" | b"l" | b"L" => Ok(SuffixType::Double),
@@ -320,7 +318,7 @@ impl<'a, E: OnLiteralError> LiteralDecoder<'a, E> {
         }
     }
 
-    fn parse_int<T: Integer>(&mut self) -> ResultScope<T> {
+    fn parse_int<T: Integer>(&mut self) -> MayUnwind<T> {
         let parsed = self.unwrap_parsed(
             self.base.parse_int::<T, _>(self.number).unwrap(), //
             false,
@@ -330,7 +328,7 @@ impl<'a, E: OnLiteralError> LiteralDecoder<'a, E> {
         Ok(parsed)
     }
 
-    fn parse_real<T: Real>(&mut self) -> ResultScope<T> {
+    fn parse_real<T: Real>(&mut self) -> MayUnwind<T> {
         let mut parsed = self.unwrap_parsed(
             self.base.parse_real::<T, _>(self.number).unwrap(), //
             false,
@@ -349,7 +347,7 @@ impl<'a, E: OnLiteralError> LiteralDecoder<'a, E> {
         Ok(parsed)
     }
 
-    fn unwrap_parsed<N>(&mut self, parsed: ParsedNumber<N>, exponent: bool) -> ResultScope<N> {
+    fn unwrap_parsed<N>(&mut self, parsed: ParsedNumber<N>, exponent: bool) -> MayUnwind<N> {
         if parsed.overflowed {
             (self.on_error)(LiteralError::OverflowOccured(exponent))?;
         }
@@ -359,7 +357,7 @@ impl<'a, E: OnLiteralError> LiteralDecoder<'a, E> {
         Ok(parsed.number)
     }
 
-    fn report_invalid_suffix(&mut self) -> ResultScope<()> {
+    fn report_invalid_suffix(&mut self) -> MayUnwind<()> {
         if self.has_dot {
             (self.on_error)(LiteralError::InvalidRealSuffix(self.suffix.into()))
         } else {

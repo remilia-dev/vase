@@ -11,14 +11,16 @@ use crate::{
             TravelerState,
         },
         CompileEnv,
-        ErrorScope,
         FileTokens,
         Keyword,
-        ResultScope,
         StringEncoding,
         Token,
         TokenKind,
         TokenKind::*,
+    },
+    error::{
+        MayUnwind,
+        Unwind,
     },
     sync::Arc,
     util::{
@@ -52,7 +54,7 @@ where OnError: FnMut(TravelerError) -> bool
         }
     }
 
-    pub fn load_start(&mut self, tokens: Arc<FileTokens>) -> ResultScope<()> {
+    pub fn load_start(&mut self, tokens: Arc<FileTokens>) -> MayUnwind<()> {
         self.frames.load_start(tokens);
         // self.frames starts before the first token in the file.
         // This allows handling any preprocessor instructions at the start of the file.
@@ -72,7 +74,7 @@ where OnError: FnMut(TravelerError) -> bool
         self.frames.head()
     }
 
-    pub fn move_forward(&mut self) -> ResultScope<&Token> {
+    pub fn move_forward(&mut self) -> MayUnwind<&Token> {
         self.frames.move_forward();
         loop {
             if self.frames.is_token_joiner_next() {
@@ -169,30 +171,30 @@ where OnError: FnMut(TravelerError) -> bool
         Ok(self.frames.head())
     }
 
-    fn handle_if(&mut self, is_if: bool, link: usize) -> ResultScope<()> {
+    fn handle_if(&mut self, is_if: bool, link: usize) -> MayUnwind<()> {
         self.frames.move_forward();
         let mut expr = match IfParser::create_and_parse(self, is_if) {
             Ok(expr) => expr,
-            Err(ErrorScope::Block) => {
+            Err(Unwind::Block) => {
                 // We failed to parse the if condition, so we assume it's false.
                 self.frames.skip_to(link, false);
                 return Ok(());
             },
-            Err(ErrorScope::Fatal) => return Err(ErrorScope::Fatal),
+            Err(Unwind::Fatal) => return Err(Unwind::Fatal),
         };
         // Move past the PreEnd token.
         self.move_forward()?;
         match IfEvaluator::calc(&mut expr, |err| self.report_error(err)) {
             Ok(true) => Ok(()),
-            Ok(false) | Err(ErrorScope::Block) => {
+            Ok(false) | Err(Unwind::Block) => {
                 self.frames.skip_to(link, false);
                 Ok(())
             },
-            Err(ErrorScope::Fatal) => Err(ErrorScope::Fatal),
+            Err(Unwind::Fatal) => Err(Unwind::Fatal),
         }
     }
 
-    fn handle_if_def(&mut self, if_def: bool, link: usize) -> ResultScope<()> {
+    fn handle_if_def(&mut self, if_def: bool, link: usize) -> MayUnwind<()> {
         let defined = match *self.frames.move_forward().kind() {
             ref token if token.is_definable() => {
                 let macro_id = token.get_definable_id();
@@ -219,7 +221,7 @@ where OnError: FnMut(TravelerError) -> bool
         Ok(())
     }
 
-    fn handle_define(&mut self) -> ResultScope<()> {
+    fn handle_define(&mut self) -> MayUnwind<()> {
         let macro_id = match *self.frames.move_forward().kind() {
             ref token if token.is_definable() => token.get_definable_id(),
             PreEnd => {
@@ -248,7 +250,7 @@ where OnError: FnMut(TravelerError) -> bool
         }
     }
 
-    fn handle_function_macro(&mut self, macro_id: usize) -> ResultScope<()> {
+    fn handle_function_macro(&mut self, macro_id: usize) -> MayUnwind<()> {
         let mut params = Vec::new();
         let mut var_arg = None;
         loop {
@@ -320,7 +322,7 @@ where OnError: FnMut(TravelerError) -> bool
         Ok(())
     }
 
-    fn handle_object_macro(&mut self, macro_id: usize) -> ResultScope<()> {
+    fn handle_object_macro(&mut self, macro_id: usize) -> MayUnwind<()> {
         if matches!(
             self.frames.preview_next_kind(false),
             Some(&TokenKind::PreEnd)
@@ -346,7 +348,7 @@ where OnError: FnMut(TravelerError) -> bool
         Ok(())
     }
 
-    fn handle_undef(&mut self) -> ResultScope<()> {
+    fn handle_undef(&mut self) -> MayUnwind<()> {
         match *self.frames.move_forward().kind() {
             ref token if token.is_definable() => {
                 let macro_id = token.get_definable_id();
@@ -369,7 +371,7 @@ where OnError: FnMut(TravelerError) -> bool
         Ok(())
     }
 
-    fn handle_include(&mut self, _include_next: bool) -> ResultScope<()> {
+    fn handle_include(&mut self, _include_next: bool) -> MayUnwind<()> {
         // We use self.move_forward to allow for macros to be decoded.
         let inc_file = match *self.move_forward()?.kind() {
             IncludePath { ref path, inc_type } => {
@@ -416,7 +418,7 @@ where OnError: FnMut(TravelerError) -> bool
         }
     }
 
-    fn handle_message(&mut self, is_error: bool) -> ResultScope<()> {
+    fn handle_message(&mut self, is_error: bool) -> MayUnwind<()> {
         let state = self.save_state();
         let message = match *self.frames.move_forward().kind() {
             Message(ref text) => {
@@ -447,7 +449,7 @@ where OnError: FnMut(TravelerError) -> bool
         self.report_error_with_state(error_kind, state)
     }
 
-    fn handle_joiner(&mut self) -> ResultScope<()> {
+    fn handle_joiner(&mut self) -> MayUnwind<()> {
         self.str_builder.clear();
         let first_token = self.head().clone();
         let join_location = self.frames.move_forward().location().clone();
@@ -543,7 +545,7 @@ where OnError: FnMut(TravelerError) -> bool
         self.env.cache().get_or_cache(self.str_builder.current())
     }
 
-    fn ensure_end_of_preprocessor(&mut self, error: Error) -> ResultScope<()> {
+    fn ensure_end_of_preprocessor(&mut self, error: Error) -> MayUnwind<()> {
         if let PreEnd = *self.frames.move_forward().kind() {
             self.frames.move_forward();
             Ok(())
@@ -554,22 +556,18 @@ where OnError: FnMut(TravelerError) -> bool
         }
     }
 
-    pub(super) fn report_error(&mut self, v: Error) -> ResultScope<()> {
+    pub(super) fn report_error(&mut self, v: Error) -> MayUnwind<()> {
         self.report_error_with_state(v, self.save_state())
     }
 
-    fn report_error_with_state(&mut self, v: Error, state: TravelerState) -> ResultScope<()> {
+    fn report_error_with_state(&mut self, v: Error, state: TravelerState) -> MayUnwind<()> {
         use crate::error::CodedError;
         let mut fatal = v.severity().is_fatal();
         let error = TravelerError { kind: v, state };
 
         fatal |= (self.on_error)(error);
 
-        if fatal {
-            Err(crate::c::ErrorScope::Fatal)
-        } else {
-            Ok(())
-        }
+        if fatal { Err(Unwind::Fatal) } else { Ok(()) }
     }
 
     fn skip_past_preprocessor(&mut self) -> usize {

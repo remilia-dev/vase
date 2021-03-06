@@ -16,11 +16,11 @@ use crate::{
         },
         CompileEnv,
         FileTokens,
-        ResultScope,
         Token,
         TokenKind,
         TokenKind::*,
     },
+    error::MayUnwind,
     sync::Arc,
     util::{
         CachedString,
@@ -343,11 +343,7 @@ impl FrameStack {
         }
     }
 
-    pub fn handle_macro(
-        &mut self,
-        handle: MacroHandle,
-        on_error: ErrorCallback,
-    ) -> ResultScope<()> {
+    pub fn handle_macro(&mut self, handle: MacroHandle, on_error: ErrorCallback) -> MayUnwind<()> {
         match handle {
             MacroHandle::Empty => {
                 // Move past the empty token.
@@ -369,7 +365,7 @@ impl FrameStack {
         macro_id: usize,
         param_count: usize,
         on_error: ErrorCallback,
-    ) -> ResultScope<()> {
+    ) -> MayUnwind<()> {
         // Pass the ID of the macro
         self.move_forward();
 
@@ -431,7 +427,7 @@ impl FrameStack {
         macro_id: usize,
         params: HashMap<usize, Vec<Token>>,
         on_error: ErrorCallback,
-    ) -> ResultScope<()> {
+    ) -> MayUnwind<()> {
         // By assuming each parameter will show up at least once, we get a good initial capacity estimation.
         let sum_parameter_lengths = params.iter().fold(0, |accum, value| accum + value.1.len());
 
@@ -520,7 +516,7 @@ impl FrameStack {
         &mut self,
         param_count: usize,
         on_error: ErrorCallback,
-    ) -> ResultScope<Vec<Vec<Token>>> {
+    ) -> MayUnwind<Vec<Vec<Token>>> {
         let mut param_tokens = vec![Vec::new()];
         let mut paren_layers = 0usize;
         let mut in_preprocessor = false;
@@ -569,14 +565,14 @@ impl FrameStack {
         Ok(param_tokens)
     }
 
-    fn report_error(&self, kind: Error, on_error: ErrorCallback) -> ResultScope<()> {
+    fn report_error(&self, kind: Error, on_error: ErrorCallback) -> MayUnwind<()> {
         use crate::error::CodedError;
         let mut fatal = kind.severity().is_fatal();
 
         fatal |= on_error(TravelerError { state: self.save_state(), kind });
 
         if fatal {
-            Err(crate::c::ErrorScope::Fatal)
+            Err(crate::error::Unwind::Fatal)
         } else {
             Ok(())
         }

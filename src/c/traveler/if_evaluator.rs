@@ -3,10 +3,10 @@
 use std::convert::TryInto;
 
 use crate::{
-    c::{
-        ast::*,
-        ErrorScope,
-        ResultScope,
+    c::ast::*,
+    error::{
+        MayUnwind,
+        Unwind,
     },
     math::{
         Integer,
@@ -15,7 +15,7 @@ use crate::{
 };
 
 type Error = crate::c::TravelerErrorKind;
-pub trait OnError = FnMut(Error) -> ResultScope<()>;
+pub trait OnError = FnMut(Error) -> MayUnwind<()>;
 
 pub struct IfEvaluator<E: OnError> {
     accum: Option<Sign>,
@@ -23,7 +23,7 @@ pub struct IfEvaluator<E: OnError> {
 }
 
 impl<E: OnError> ExprVisitor for IfEvaluator<E> {
-    fn on_literal(&mut self, lit: &mut Literal) -> ResultScope<()> {
+    fn on_literal(&mut self, lit: &mut Literal) -> MayUnwind<()> {
         // If this is the first literal we've encountered, make the accumulator it.
         if self.accum.is_none() {
             self.accum = match lit.kind {
@@ -33,14 +33,14 @@ impl<E: OnError> ExprVisitor for IfEvaluator<E> {
                     (self.on_error)(Error::Unreachable(
                         "Only I64 and U64 literals should appear in an #if/#elif tree.",
                     ))?;
-                    return Err(ErrorScope::Fatal);
+                    return Err(Unwind::Fatal);
                 },
             };
         }
         Ok(())
     }
 
-    fn on_prefix(&mut self, expr: &mut PrefixExpr) -> ResultScope<()> {
+    fn on_prefix(&mut self, expr: &mut PrefixExpr) -> MayUnwind<()> {
         self.visit_prefix(expr)?;
         use PrefixOp::*;
         let accum = self.accum.take().unwrap();
@@ -69,14 +69,14 @@ impl<E: OnError> ExprVisitor for IfEvaluator<E> {
                 (self.on_error)(Error::Unreachable(
                     "Only +, -, ~, and ! unary operators should occur in #if/#elif",
                 ))?;
-                return Err(ErrorScope::Fatal);
+                return Err(Unwind::Fatal);
             },
         }
         .into();
         Ok(())
     }
 
-    fn on_binary(&mut self, expr: &mut BinaryExpr) -> ResultScope<()> {
+    fn on_binary(&mut self, expr: &mut BinaryExpr) -> MayUnwind<()> {
         self.on_expr(&mut expr.rhs)?;
         let rhs = self.accum.take().unwrap();
         self.on_expr(&mut expr.lhs)?;
@@ -135,7 +135,7 @@ impl<E: OnError> ExprVisitor for IfEvaluator<E> {
         Ok(())
     }
 
-    fn on_ternary(&mut self, expr: &mut TernaryExpr) -> ResultScope<()> {
+    fn on_ternary(&mut self, expr: &mut TernaryExpr) -> MayUnwind<()> {
         self.on_expr(&mut expr.condition)?;
         match self.accum.take() {
             Some(lit) if !lit.is_zero() => self.visit_expr(&mut expr.if_true),
@@ -143,7 +143,7 @@ impl<E: OnError> ExprVisitor for IfEvaluator<E> {
         }
     }
 
-    fn on_assignment(&mut self, _: &mut AssignmentExpr) -> ResultScope<()> {
+    fn on_assignment(&mut self, _: &mut AssignmentExpr) -> MayUnwind<()> {
         (self.on_error)(Error::Unreachable(
             "Assignment operators should not occur in a #if/#elif condition",
         ))
@@ -151,13 +151,13 @@ impl<E: OnError> ExprVisitor for IfEvaluator<E> {
 }
 
 impl<E: OnError> IfEvaluator<E> {
-    pub fn calc(e: &mut Expr, on_error: E) -> ResultScope<bool> {
+    pub fn calc(e: &mut Expr, on_error: E) -> MayUnwind<bool> {
         let mut visitor = IfEvaluator { accum: None, on_error };
         visitor.on_expr(e)?;
         Ok(visitor.accum.map_or(false, |v| !v.is_zero()))
     }
 
-    fn as_unsigned(&mut self, s: Sign, rhs: bool, expr: &BinaryExpr) -> ResultScope<u64> {
+    fn as_unsigned(&mut self, s: Sign, rhs: bool, expr: &BinaryExpr) -> MayUnwind<u64> {
         match s.try_into() {
             Ok(u) => Ok(u),
             Err(i) => {
@@ -177,7 +177,7 @@ impl<E: OnError> IfEvaluator<E> {
         lhs: i64,
         rhs: i64,
         expr: &BinaryExpr,
-    ) -> ResultScope<i64> {
+    ) -> MayUnwind<i64> {
         if v.1 {
             let error = Error::OverflowInIfBinary(lhs, rhs, expr.clone().into());
             (self.on_error)(error)?;
@@ -185,17 +185,17 @@ impl<E: OnError> IfEvaluator<E> {
         Ok(v.0)
     }
 
-    fn may_div_0<I>(&mut self, lhs: I, v: Option<I>, expr: &BinaryExpr) -> ResultScope<I>
+    fn may_div_0<I>(&mut self, lhs: I, v: Option<I>, expr: &BinaryExpr) -> MayUnwind<I>
     where I: Into<Sign> {
         if let Some(v) = v {
             Ok(v)
         } else {
             (self.on_error)(Error::IfDiv0(lhs.into(), expr.clone().into()))?;
-            Err(ErrorScope::Block)
+            Err(Unwind::Block)
         }
     }
 
-    fn shift<I>(&mut self, shr: bool, lhs: I, rhs: I, expr: &BinaryExpr) -> ResultScope<I>
+    fn shift<I>(&mut self, shr: bool, lhs: I, rhs: I, expr: &BinaryExpr) -> MayUnwind<I>
     where I: Integer + Into<Sign> {
         let shifted = if shr {
             lhs.checked_shr(rhs)

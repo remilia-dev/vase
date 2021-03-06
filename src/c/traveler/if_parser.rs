@@ -18,12 +18,14 @@ use crate::{
             PrefixOp,
             TernaryExpr,
         },
-        ErrorScope,
-        ResultScope,
         Token,
         TokenKind::*,
         Traveler,
         TravelerError,
+    },
+    error::{
+        MayUnwind,
+        Unwind,
     },
     util::SourceLocation,
 };
@@ -44,12 +46,12 @@ where OnError: FnMut(TravelerError) -> bool
     pub fn create_and_parse(
         traveler: &'a mut Traveler<OnError>,
         is_if: bool,
-    ) -> ResultScope<Box<Expr>> {
+    ) -> MayUnwind<Box<Expr>> {
         let defined_id = traveler.env.cache().get_or_cache("defined").uniq_id();
         Self { traveler, is_if, defined_id }.parse_expression()
     }
 
-    fn parse_expression(&mut self) -> ResultScope<Box<Expr>> {
+    fn parse_expression(&mut self) -> MayUnwind<Box<Expr>> {
         let mut expression = self.parse_atom()?;
 
         loop {
@@ -77,7 +79,7 @@ where OnError: FnMut(TravelerError) -> bool
                 _ => {
                     let error = Error::IfExpectedOp(self.is_if, head.clone());
                     self.report_error(error)?;
-                    return Err(ErrorScope::Block);
+                    return Err(Unwind::Block);
                 },
             }
         }
@@ -89,7 +91,7 @@ where OnError: FnMut(TravelerError) -> bool
         &mut self,
         expression: Box<Expr>,
         qmark_loc: SourceLocation,
-    ) -> ResultScope<Box<Expr>> {
+    ) -> MayUnwind<Box<Expr>> {
         // Move past the ?
         self.move_forward()?;
         let if_true = self.parse_expression()?;
@@ -100,7 +102,7 @@ where OnError: FnMut(TravelerError) -> bool
         } else {
             let error = Error::IfTernaryExpectedColon(self.is_if, self.clone_head());
             self.report_error(error)?;
-            return Err(ErrorScope::Block);
+            return Err(Unwind::Block);
         };
         // Move past the :
         self.move_forward()?;
@@ -119,7 +121,7 @@ where OnError: FnMut(TravelerError) -> bool
         }))
     }
 
-    fn parse_atom(&mut self) -> ResultScope<Box<Expr>> {
+    fn parse_atom(&mut self) -> MayUnwind<Box<Expr>> {
         let head = self.head();
         match *head.kind() {
             // 'defined macro_id' or 'defined(macro_id)'
@@ -169,12 +171,12 @@ where OnError: FnMut(TravelerError) -> bool
                 let error = Error::IfExpectedAtom(self.is_if, head.clone());
                 self.report_error(error)?;
                 // Cascade up to the if condition. We can't parse the expression.
-                Err(ErrorScope::Block)
+                Err(Unwind::Block)
             },
         }
     }
 
-    fn parse_defined(&mut self, loc: SourceLocation) -> ResultScope<Box<Expr>> {
+    fn parse_defined(&mut self, loc: SourceLocation) -> MayUnwind<Box<Expr>> {
         let id = match *self.move_frame_forward().kind() {
             ref id if id.is_definable() => {
                 let check_id = id.get_definable_id();
@@ -219,7 +221,7 @@ where OnError: FnMut(TravelerError) -> bool
         Ok(Box::new(Literal { loc, kind: value.into() }.into()))
     }
 
-    fn parse_parens(&mut self, lparen_loc: Option<SourceLocation>) -> ResultScope<Box<Expr>> {
+    fn parse_parens(&mut self, lparen_loc: Option<SourceLocation>) -> MayUnwind<Box<Expr>> {
         self.move_forward()?;
         let expr = self.parse_expression()?;
 
@@ -241,11 +243,7 @@ where OnError: FnMut(TravelerError) -> bool
         ))
     }
 
-    fn parse_number(
-        &mut self,
-        loc: SourceLocation,
-        digits: CachedString,
-    ) -> ResultScope<Box<Expr>> {
+    fn parse_number(&mut self, loc: SourceLocation, digits: CachedString) -> MayUnwind<Box<Expr>> {
         let mut kind = LiteralKind::from_number(digits.as_ref(), |err| {
             self.report_error(Error::LiteralError(err))
         })?;
@@ -269,7 +267,7 @@ where OnError: FnMut(TravelerError) -> bool
         loc: SourceLocation,
         chars: &str,
         enc: StringEncoding,
-    ) -> ResultScope<Box<Expr>> {
+    ) -> MayUnwind<Box<Expr>> {
         let kind = LiteralKind::from_character(chars, enc, |err| {
             self.report_error(Error::LiteralError(err))
         })?;
@@ -280,7 +278,7 @@ where OnError: FnMut(TravelerError) -> bool
         self.traveler.frames.move_forward()
     }
 
-    fn move_forward(&mut self) -> ResultScope<&Token> {
+    fn move_forward(&mut self) -> MayUnwind<&Token> {
         self.traveler.move_forward()
     }
 
@@ -292,7 +290,7 @@ where OnError: FnMut(TravelerError) -> bool
         self.traveler.head().clone()
     }
 
-    fn report_error(&mut self, error: Error) -> ResultScope<()> {
+    fn report_error(&mut self, error: Error) -> MayUnwind<()> {
         self.traveler.report_error(error)
     }
 }
