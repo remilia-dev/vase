@@ -1,8 +1,10 @@
 // Copyright 2021. remilia-dev
 // This source code is licensed under GPLv3 or any later version.
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::path::Path;
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    path::Path,
+};
 
 use crate::{
     c::{

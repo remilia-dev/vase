@@ -1,11 +1,13 @@
 // Copyright 2021. remilia-dev
 // This source code is licensed under GPLv3 or any later version.
-use std::fmt;
-use std::marker::PhantomData;
-use std::ops::Deref;
-use std::ptr::{
-    null_mut,
-    NonNull,
+use std::{
+    fmt,
+    marker::PhantomData,
+    ops::Deref,
+    ptr::{
+        null_mut,
+        NonNull,
+    },
 };
 
 use crate::sync::{

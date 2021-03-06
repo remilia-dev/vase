@@ -1,10 +1,12 @@
 // Copyright 2021. remilia-dev
 // This source code is licensed under GPLv3 or any later version.
-use std::marker::PhantomPinned;
-use std::mem::swap;
-use std::ptr::{
-    null_mut,
-    NonNull,
+use std::{
+    marker::PhantomPinned,
+    mem::swap,
+    ptr::{
+        null_mut,
+        NonNull,
+    },
 };
 
 use crate::{

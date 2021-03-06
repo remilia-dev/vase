@@ -1,7 +1,9 @@
 // Copyright 2021. remilia-dev
 // This source code is licensed under GPLv3 or any later version.
-use vase::c::Keyword;
-use vase::c::TokenKind::*;
+use vase::c::{
+    Keyword,
+    TokenKind::*,
+};
 
 use super::{
     new_env,

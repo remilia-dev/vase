@@ -10,11 +10,14 @@ pub use implementation::Traveler;
 pub use state::TravelerState;
 
 // These uses are to allow the various files in this module to interact.
-pub(self) use self::frame::*;
-pub(self) use self::frame_stack::*;
-pub(self) use self::if_evaluator::IfEvaluator;
-pub(self) use self::if_parser::IfParser;
-pub(self) use self::macro_kind::*;
+// The self:: prefix is to prevent rustfmt from mixing these with the public imports above.
+pub(self) use self::{
+    frame::*,
+    frame_stack::*,
+    if_evaluator::IfEvaluator,
+    if_parser::IfParser,
+    macro_kind::*,
+};
 
 mod error;
 mod frame;

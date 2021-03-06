@@ -2,8 +2,6 @@
 // This source code is licensed under GPLv3 or any later version.
 use std::convert::TryInto;
 
-use crate::c::StringEncoding;
-use crate::util::CachedString;
 use crate::{
     c::{
         ast::{
@@ -18,6 +16,7 @@ use crate::{
             PrefixOp,
             TernaryExpr,
         },
+        StringEncoding,
         Token,
         TokenKind::*,
         Traveler,
@@ -27,7 +26,10 @@ use crate::{
         MayUnwind,
         Unwind,
     },
-    util::SourceLocation,
+    util::{
+        CachedString,
+        SourceLocation,
+    },
 };
 
 type Error = crate::c::TravelerErrorKind;

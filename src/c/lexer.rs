@@ -1,7 +1,9 @@
 // Copyright 2021. remilia-dev
 // This source code is licensed under GPLv3 or any later version.
-use std::fs::File;
-use std::path::Path;
+use std::{
+    fs::File,
+    path::Path,
+};
 
 use unicode_normalization::UnicodeNormalization;
 

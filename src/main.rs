@@ -2,8 +2,10 @@
 // This source code is licensed under GPLv3 or any later version.
 use std::path::Path;
 
-use vase::c::*;
-use vase::sync::Arc;
+use vase::{
+    c::*,
+    sync::Arc,
+};
 
 fn main() {
     let mut settings = CompileSettings::default();
@@ -12,7 +14,7 @@ fn main() {
     let mut lexer = MultiLexer::new(env.clone());
     lexer.lex_multi_threaded(&*env.settings().source_files);
 
-    let mut traveler = Traveler::new(env.clone(), &|_| unimplemented!());
+    let mut traveler = Traveler::new(env.clone(), &|err| panic!("{:?}", err));
     let tokens = env.file_id_to_tokens()[0].clone();
     println!("{:#?}", tokens);
     traveler.load_start(tokens).unwrap();

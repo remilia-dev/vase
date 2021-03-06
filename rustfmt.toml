@@ -10,8 +10,12 @@ chain_width = 70
 fn_call_width = 58
 # Splitting up imports into a specific order is best practice in almost any language.
 group_imports = "StdExternalCrate"
+# It's easy to let the editor insert and import and forget to combine them later.
+# Generally I would only combine this crate's imports and imports of other crates.
+imports_granularity="Crate"
 # Multi-imports should be layed out vertically. This will mainly apply to crate imports.
-# I would use VerticalHorizontal but I prefer spaces inside the {} when horizontal.
+# I would use Mixed but I find the lines are too long and I wish I could have spaces
+# inside the {}.
 imports_layout = "Vertical"
 # A small copyright/license header isn't bad.
 license_template_path = "file_header"
