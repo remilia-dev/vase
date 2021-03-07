@@ -100,8 +100,8 @@ impl Frame {
         use Frame::*;
         match *self {
             File { file_id, .. } | ObjectMacro { file_id, .. } => file_id,
-            FuncMacro { ref tokens, index, .. } => tokens[index].location().file_id(),
-            SingleToken { ref token, .. } => token.location().file_id(),
+            FuncMacro { ref tokens, index, .. } => tokens[index].loc().file_id(),
+            SingleToken { ref token, .. } => token.loc().file_id(),
             TokenCollector { .. } | TokenCollectorParameter { .. } => panic!(
                 "Can't get the file id on token collector frames! No analysis should be performed within these frames."
             ),

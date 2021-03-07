@@ -452,17 +452,17 @@ where OnError: FnMut(TravelerError) -> bool
     fn handle_joiner(&mut self) -> MayUnwind<()> {
         self.str_builder.clear();
         let first_token = self.head().clone();
-        let join_location = self.frames.move_forward().location().clone();
+        let join_loc = self.frames.move_forward().loc().clone();
         let second_token = self.frames.move_forward().clone();
 
         if let Some(joined) = self.attempt_join(&first_token, &second_token) {
-            let joined_token = Token::new(join_location, true, joined);
+            let joined_token = Token::new(join_loc, true, joined);
             self.frames.push_token(joined_token);
             Ok(())
         } else {
             // TODO: Make the recovery after this error better by having first_token get processed
             // as if it wasn't joined. (Right now this just skips first_token straight to second_token).
-            let error = Error::InvalidJoin(first_token, join_location, second_token);
+            let error = Error::InvalidJoin(first_token, join_loc, second_token);
             self.report_error(error)
         }
     }

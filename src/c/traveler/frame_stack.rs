@@ -450,7 +450,7 @@ impl FrameStack {
                     break;
                 },
                 Hash { .. } if self.frames.len() == function_frame => {
-                    let location = head.location().clone();
+                    let loc = head.loc().clone();
                     let define = match self.move_forward().kind() {
                         token if token.is_definable() => token.get_definable_id(),
                         _ => {
@@ -472,7 +472,7 @@ impl FrameStack {
                         self.report_error(error, on_error)?;
                         Arc::new(Box::from(id.string()))
                     };
-                    tokens.push(Token::new(location, true, String {
+                    tokens.push(Token::new(loc, true, String {
                         encoding: crate::c::StringEncoding::Default,
                         has_escapes: false,
                         is_char: false,

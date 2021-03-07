@@ -19,13 +19,13 @@ use crate::{
         create_intos,
         enum_with_properties,
         CharExt,
-        SourceLocation,
+        SourceLoc,
     },
 };
 
 #[derive(Clone, Debug)]
 pub struct Literal {
-    pub loc: SourceLocation,
+    pub loc: SourceLoc,
     pub kind: LiteralKind,
 }
 

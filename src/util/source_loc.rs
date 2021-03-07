@@ -3,7 +3,7 @@
 use std::convert::TryInto;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct SourceLocation {
+pub struct SourceLoc {
     file_id: FileId,
     /// The byte in the file this location starts at.
     pub byte: u32,
@@ -11,14 +11,14 @@ pub struct SourceLocation {
     pub byte_length: u16,
 }
 
-impl SourceLocation {
+impl SourceLoc {
     /// Creates a new source location that represents a specific range of bytes in a file.
     pub fn new(file_id: FileId, byte: u32, byte_length: u16) -> Self {
-        SourceLocation { file_id, byte, byte_length }
+        SourceLoc { file_id, byte, byte_length }
     }
     /// Creates a new source location that represents the first byte in a file.
     pub fn new_first_byte(file_id: FileId) -> Self {
-        SourceLocation { file_id, byte: 0, byte_length: 1 }
+        SourceLoc { file_id, byte: 0, byte_length: 1 }
     }
     /// The id of the file this source location is in.
     pub fn file_id(&self) -> FileId {
@@ -37,13 +37,13 @@ impl SourceLocation {
     /// of this source location and all of another source location.
     ///
     /// This function will return None if the source locations are from different files.
-    pub fn through(&self, other: &SourceLocation) -> Option<SourceLocation> {
+    pub fn through(&self, other: &SourceLoc) -> Option<SourceLoc> {
         if self.file_id == other.file_id {
             let start = self.byte.min(other.byte);
             let end = (self.byte + self.byte_length as u32) //
                 .max(other.byte + other.byte_length as u32);
             let length = (end - start).try_into().unwrap_or(u16::MAX);
-            Some(SourceLocation::new(self.file_id, start, length))
+            Some(SourceLoc::new(self.file_id, start, length))
         } else {
             None
         }
@@ -64,29 +64,29 @@ mod test {
     fn range_matches_expected() {
         const START: usize = 23;
         const LENGTH: usize = 45;
-        let test_case = SourceLocation::new(0, START as u32, LENGTH as u16);
+        let test_case = SourceLoc::new(0, START as u32, LENGTH as u16);
         assert_eq!(test_case.range().start, START);
         assert_eq!(test_case.range().len(), LENGTH);
     }
 
     #[test]
     fn through_matches_expected() {
-        let start = SourceLocation::new(0, 3, 4);
-        let end = SourceLocation::new(0, 20, 3);
-        assert_eq!(start.through(&end), Some(SourceLocation::new(0, 3, 20)));
+        let start = SourceLoc::new(0, 3, 4);
+        let end = SourceLoc::new(0, 20, 3);
+        assert_eq!(start.through(&end), Some(SourceLoc::new(0, 3, 20)));
     }
 
     #[test]
     fn through_reversed_matches_expected() {
-        let start = SourceLocation::new(0, 20, 3);
-        let end = SourceLocation::new(0, 3, 4);
-        assert_eq!(start.through(&end), Some(SourceLocation::new(0, 3, 20)));
+        let start = SourceLoc::new(0, 20, 3);
+        let end = SourceLoc::new(0, 3, 4);
+        assert_eq!(start.through(&end), Some(SourceLoc::new(0, 3, 20)));
     }
 
     #[test]
     fn through_returns_none_when_different_files() {
-        let start = SourceLocation::new(0, 0, 10);
-        let end = SourceLocation::new(1, 10, 10);
+        let start = SourceLoc::new(0, 0, 10);
+        let end = SourceLoc::new(1, 10, 10);
         assert!(start.through(&end).is_none());
     }
 }

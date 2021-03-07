@@ -6,9 +6,9 @@ pub use char_ext::{
     Utf8DecodeError,
 };
 pub use ptr_equality::PtrEquality;
-pub use source_location::{
+pub use source_loc::{
     FileId,
-    SourceLocation,
+    SourceLoc,
 };
 pub use string_builder::StringBuilder;
 pub use string_cache::{
@@ -25,6 +25,6 @@ pub mod mem;
 
 mod char_ext;
 mod ptr_equality;
-mod source_location;
+mod source_loc;
 mod string_builder;
 mod string_cache;

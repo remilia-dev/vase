@@ -28,7 +28,7 @@ use crate::{
     },
     util::{
         CachedString,
-        SourceLocation,
+        SourceLoc,
     },
 };
 
@@ -60,7 +60,7 @@ where OnError: FnMut(TravelerError) -> bool
             let head = self.head();
             expression = match *head.kind() {
                 ref op if op.is_binary_op() => {
-                    let op_loc = head.location().clone();
+                    let op_loc = head.loc().clone();
                     let op: BinaryOp = op.try_into().unwrap();
                     self.move_forward()?;
                     let rhs = self.parse_atom()?;
@@ -69,7 +69,7 @@ where OnError: FnMut(TravelerError) -> bool
                     })
                 },
                 QMark => {
-                    let qmark_loc = head.location().clone();
+                    let qmark_loc = head.loc().clone();
                     self.parse_ternary(expression, qmark_loc)?
                 },
                 Comma => {
@@ -92,7 +92,7 @@ where OnError: FnMut(TravelerError) -> bool
     fn parse_ternary(
         &mut self,
         expression: Box<Expr>,
-        qmark_loc: SourceLocation,
+        qmark_loc: SourceLoc,
     ) -> MayUnwind<Box<Expr>> {
         // Move past the ?
         self.move_forward()?;
@@ -100,7 +100,7 @@ where OnError: FnMut(TravelerError) -> bool
 
         let maybe_colon = self.head();
         let colon_loc = if matches!(*maybe_colon.kind(), Colon) {
-            maybe_colon.location().clone()
+            maybe_colon.loc().clone()
         } else {
             let error = Error::IfTernaryExpectedColon(self.is_if, self.clone_head());
             self.report_error(error)?;
@@ -128,29 +128,29 @@ where OnError: FnMut(TravelerError) -> bool
         match *head.kind() {
             // 'defined macro_id' or 'defined(macro_id)'
             Identifier(ref id) if id.uniq_id() == self.defined_id => {
-                let loc = head.location().clone();
+                let loc = head.loc().clone();
                 self.parse_defined(loc)
             },
             // Undefined identifiers are replaced with 0s
             Identifier(..) => {
-                let loc = head.location().clone();
+                let loc = head.loc().clone();
                 self.move_forward()?;
                 Ok(Box::new(Literal { loc, kind: 0i32.into() }.into()))
             },
             Number(ref digits) => {
                 let digits = digits.clone();
-                let loc = head.location().clone();
+                let loc = head.loc().clone();
                 self.parse_number(loc, digits)
             },
             Plus | Minus | Tilde | Bang => {
                 let op: PrefixOp = head.kind().try_into().unwrap();
-                let op_loc = head.location().clone();
+                let op_loc = head.loc().clone();
                 self.move_forward()?;
                 let expr = self.parse_atom()?;
                 Ok(Box::new(PrefixExpr { op, op_loc, expr }.into()))
             },
             LParen { .. } => {
-                let lparen_loc = Some(head.location().clone());
+                let lparen_loc = Some(head.loc().clone());
                 self.parse_parens(lparen_loc)
             },
             String {
@@ -160,11 +160,11 @@ where OnError: FnMut(TravelerError) -> bool
                 ..
             } => {
                 let str_data = str_data.clone();
-                let loc = head.location().clone();
+                let loc = head.loc().clone();
                 self.parse_char(loc, &*str_data, encoding)
             },
             PreEnd => {
-                let loc = head.location().clone();
+                let loc = head.loc().clone();
                 let error = Error::IfExpectedAtom(self.is_if, head.clone());
                 self.report_error(error)?;
                 Ok(Box::new(Literal { loc, kind: 0i32.into() }.into()))
@@ -178,7 +178,7 @@ where OnError: FnMut(TravelerError) -> bool
         }
     }
 
-    fn parse_defined(&mut self, loc: SourceLocation) -> MayUnwind<Box<Expr>> {
+    fn parse_defined(&mut self, loc: SourceLoc) -> MayUnwind<Box<Expr>> {
         let id = match *self.move_frame_forward().kind() {
             ref id if id.is_definable() => {
                 let check_id = id.get_definable_id();
@@ -223,14 +223,14 @@ where OnError: FnMut(TravelerError) -> bool
         Ok(Box::new(Literal { loc, kind: value.into() }.into()))
     }
 
-    fn parse_parens(&mut self, lparen_loc: Option<SourceLocation>) -> MayUnwind<Box<Expr>> {
+    fn parse_parens(&mut self, lparen_loc: Option<SourceLoc>) -> MayUnwind<Box<Expr>> {
         self.move_forward()?;
         let expr = self.parse_expression()?;
 
         let maybe_rparen = self.move_forward()?;
         let rparen_loc = match *maybe_rparen.kind() {
             RParen => {
-                let loc = maybe_rparen.location().clone();
+                let loc = maybe_rparen.loc().clone();
                 self.move_forward()?;
                 Some(loc)
             },
@@ -245,7 +245,7 @@ where OnError: FnMut(TravelerError) -> bool
         ))
     }
 
-    fn parse_number(&mut self, loc: SourceLocation, digits: CachedString) -> MayUnwind<Box<Expr>> {
+    fn parse_number(&mut self, loc: SourceLoc, digits: CachedString) -> MayUnwind<Box<Expr>> {
         let mut kind = LiteralKind::from_number(digits.as_ref(), |err| {
             self.report_error(Error::LiteralError(err))
         })?;
@@ -266,7 +266,7 @@ where OnError: FnMut(TravelerError) -> bool
 
     fn parse_char(
         &mut self,
-        loc: SourceLocation,
+        loc: SourceLoc,
         chars: &str,
         enc: StringEncoding,
     ) -> MayUnwind<Box<Expr>> {

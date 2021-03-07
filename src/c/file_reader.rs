@@ -5,12 +5,12 @@ use std::convert::TryFrom;
 use crate::util::{
     CharExt,
     FileId,
-    SourceLocation,
+    SourceLoc,
     Utf8DecodeError,
 };
 
 pub struct FileReader {
-    line_chars: Vec<CharLocation>,
+    line_chars: Vec<CharLoc>,
     position: usize,
     file_id: FileId,
     last_byte: u32,
@@ -59,7 +59,7 @@ impl FileReader {
                 c => c,
             };
 
-            self.line_chars.push(CharLocation {
+            self.line_chars.push(CharLoc {
                 char: add_char,
                 byte: u32::try_from(byte_pos).unwrap_or(u32::MAX),
                 length: char_bytes.byte_count() as u32,
@@ -85,25 +85,25 @@ impl FileReader {
         self.line_chars.get(self.position).map(|cl| cl.char)
     }
 
-    pub fn front_location(&self) -> Option<(char, SourceLocation)> {
+    pub fn front_loc(&self) -> Option<(char, SourceLoc)> {
         let cl = self.line_chars.get(self.position)?;
-        let location = SourceLocation::new(self.file_id, cl.byte, cl.length as u16);
-        Some((cl.char, location))
+        let loc = SourceLoc::new(self.file_id, cl.byte, cl.length as u16);
+        Some((cl.char, loc))
     }
 
-    pub fn location(&self) -> SourceLocation {
+    pub fn loc(&self) -> SourceLoc {
         if let Some(cl) = self.line_chars.get(self.position) {
-            SourceLocation::new(self.file_id, cl.byte, cl.length as u16)
+            SourceLoc::new(self.file_id, cl.byte, cl.length as u16)
         } else {
-            SourceLocation::new(self.file_id, self.last_byte, 0)
+            SourceLoc::new(self.file_id, self.last_byte, 0)
         }
     }
 
-    pub fn previous_location(&self) -> SourceLocation {
+    pub fn previous_loc(&self) -> SourceLoc {
         if let Some(cl) = self.line_chars.get(self.position - 1) {
-            SourceLocation::new(self.file_id, cl.byte, cl.length as u16)
+            SourceLoc::new(self.file_id, cl.byte, cl.length as u16)
         } else {
-            SourceLocation::new(self.file_id, self.last_byte, 0)
+            SourceLoc::new(self.file_id, self.last_byte, 0)
         }
     }
 
@@ -158,7 +158,7 @@ impl Default for FileReader {
 }
 
 #[derive(Copy, Clone)]
-struct CharLocation {
+struct CharLoc {
     char: char,
     byte: u32,
     length: u32,

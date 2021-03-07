@@ -10,7 +10,7 @@ use crate::{
     },
     util::{
         create_intos,
-        SourceLocation,
+        SourceLoc,
     },
 };
 
@@ -76,15 +76,15 @@ impl Expr {
 
 #[derive(Clone, Debug)]
 pub struct ParenExpr {
-    pub lparen_loc: Option<SourceLocation>,
+    pub lparen_loc: Option<SourceLoc>,
     pub expr: Box<Expr>,
-    pub rparen_loc: Option<SourceLocation>,
+    pub rparen_loc: Option<SourceLoc>,
 }
 
 #[derive(Clone, Debug)]
 pub struct PrefixExpr {
     pub op: PrefixOp,
-    pub op_loc: SourceLocation,
+    pub op_loc: SourceLoc,
     pub expr: Box<Expr>,
 }
 
@@ -92,16 +92,16 @@ pub struct PrefixExpr {
 pub struct BinaryExpr {
     pub lhs: Box<Expr>,
     pub op: BinaryOp,
-    pub op_loc: SourceLocation,
+    pub op_loc: SourceLoc,
     pub rhs: Box<Expr>,
 }
 
 #[derive(Clone, Debug)]
 pub struct TernaryExpr {
     pub condition: Box<Expr>,
-    pub qmark_loc: SourceLocation,
+    pub qmark_loc: SourceLoc,
     pub if_true: Box<Expr>,
-    pub colon_loc: SourceLocation,
+    pub colon_loc: SourceLoc,
     pub if_false: Box<Expr>,
 }
 
@@ -109,6 +109,6 @@ pub struct TernaryExpr {
 pub struct AssignmentExpr {
     pub to: Box<Expr>,
     pub op: Option<BinaryOp>,
-    pub op_loc: SourceLocation,
+    pub op_loc: SourceLoc,
     pub value: Box<Expr>,
 }

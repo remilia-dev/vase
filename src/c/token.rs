@@ -10,31 +10,31 @@ use crate::{
     util::{
         CachedString,
         FileId,
-        SourceLocation,
+        SourceLoc,
     },
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Token {
-    location: SourceLocation,
+    loc: SourceLoc,
     whitespace_before: bool,
     kind: TokenKind,
 }
 impl Token {
-    pub fn new(location: SourceLocation, whitespace_before: bool, kind: TokenKind) -> Token {
-        Token { location, whitespace_before, kind }
+    pub fn new(loc: SourceLoc, whitespace_before: bool, kind: TokenKind) -> Token {
+        Token { loc, whitespace_before, kind }
     }
 
     pub fn new_first_byte(file_id: FileId, kind: TokenKind) -> Token {
         Token {
-            location: SourceLocation::new_first_byte(file_id),
+            loc: SourceLoc::new_first_byte(file_id),
             whitespace_before: false,
             kind,
         }
     }
 
-    pub fn location(&self) -> &SourceLocation {
-        &self.location
+    pub fn loc(&self) -> &SourceLoc {
+        &self.loc
     }
     pub fn whitespace_before(&self) -> bool {
         self.whitespace_before

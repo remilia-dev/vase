@@ -20,7 +20,7 @@ use crate::{
     util::{
         CachedString,
         FileId,
-        SourceLocation,
+        SourceLoc,
         StringBuilder,
     },
 };
@@ -110,7 +110,7 @@ struct LexerState<'a, OnInclude: IncludeCallback> {
     mode: CLexerMode,
     at_start_of_line: bool,
     have_skipped_whitespace: bool,
-    start_location: SourceLocation,
+    start_loc: SourceLoc,
     tokens: FileTokens,
     env: &'a CompileEnv,
     include_callback: &'a mut OnInclude,
@@ -130,7 +130,7 @@ impl<'a, OnInclude: IncludeCallback> LexerState<'a, OnInclude> {
             mode: CLexerMode::Normal,
             at_start_of_line: true,
             have_skipped_whitespace: false,
-            start_location: SourceLocation::new_first_byte(file_id),
+            start_loc: SourceLoc::new_first_byte(file_id),
             tokens: FileTokens::new(file_id, path),
             env: shared_data.env,
             include_callback: &mut shared_data.include_callback,
@@ -147,14 +147,14 @@ impl<'a, OnInclude: IncludeCallback> LexerState<'a, OnInclude> {
         loop {
             self.have_skipped_whitespace |= self.reader.skip_most_whitespace();
 
-            let (character, location) = match self.reader.front_location() {
-                Some((char, location)) => (char, location),
+            let (character, loc) = match self.reader.front_loc() {
+                Some((char, loc)) => (char, loc),
                 None => {
                     self.end_line();
                     break;
                 },
             };
-            self.start_location = location;
+            self.start_loc = loc;
 
             match character {
                 '/' if self.reader.move_forward_if_next('/') => self.lex_comment(false),
@@ -171,7 +171,7 @@ impl<'a, OnInclude: IncludeCallback> LexerState<'a, OnInclude> {
             };
         }
 
-        let eof_token = Token::new(self.reader.location(), false, TokenKind::Eof);
+        let eof_token = Token::new(self.reader.loc(), false, TokenKind::Eof);
         self.tokens.append(eof_token);
 
         self.tokens.finalize();
@@ -330,10 +330,10 @@ impl<'a, OnInclude: IncludeCallback> LexerState<'a, OnInclude> {
             match self.link_stack.pop() {
                 Some(index) => self.tokens[index].kind_mut().set_link(curr_index),
                 None => {
-                    let location = self.source_location();
+                    let loc = self.source_loc();
                     let error = LexerError {
                         kind: LexerErrorKind::MissingCorrespondingIf,
-                        location,
+                        loc,
                     };
                     self.tokens.add_error_token(error);
                 },
@@ -378,10 +378,10 @@ impl<'a, OnInclude: IncludeCallback> LexerState<'a, OnInclude> {
         }
 
         if !correctly_ended {
-            let location = self.reader.location();
+            let loc = self.reader.loc();
             let error = LexerError {
                 kind: LexerErrorKind::UnendedInclude,
-                location,
+                loc,
             };
             self.tokens.add_error_token(error);
         }
@@ -443,10 +443,10 @@ impl<'a, OnInclude: IncludeCallback> LexerState<'a, OnInclude> {
         }
 
         if !ended_correctly {
-            let location = self.reader.location();
+            let loc = self.reader.loc();
             let error = LexerError {
                 kind: LexerErrorKind::UnendedString,
-                location,
+                loc,
             };
             self.tokens.add_error_token(error);
         }
@@ -511,10 +511,10 @@ impl<'a, OnInclude: IncludeCallback> LexerState<'a, OnInclude> {
                 Some(cl) => cl,
                 None => {
                     if multi_line {
-                        let location = self.reader.location();
+                        let loc = self.reader.loc();
                         let error = LexerError {
                             kind: LexerErrorKind::UnendedComment,
-                            location,
+                            loc,
                         };
                         self.tokens.add_error_token(error);
                     }
@@ -567,7 +567,7 @@ impl<'a, OnInclude: IncludeCallback> LexerState<'a, OnInclude> {
         if self.mode != CLexerMode::Normal {
             self.mode = CLexerMode::Normal;
             self.tokens.append(Token::new(
-                self.reader.location(),
+                self.reader.loc(), //
                 false,
                 TokenKind::PreEnd,
             ));
@@ -578,17 +578,15 @@ impl<'a, OnInclude: IncludeCallback> LexerState<'a, OnInclude> {
     }
 
     fn add_token(&mut self, kind: TokenKind) {
-        let location = self.source_location();
-        let token = Token::new(location, self.have_skipped_whitespace, kind);
+        let loc = self.source_loc();
+        let token = Token::new(loc, self.have_skipped_whitespace, kind);
         self.tokens.append(token);
         self.at_start_of_line = false;
         self.have_skipped_whitespace = false;
     }
 
-    fn source_location(&self) -> SourceLocation {
-        let end = self.reader.previous_location();
-        self.start_location
-            .through(&end)
-            .unwrap_or_else(|| self.start_location.clone())
+    fn source_loc(&self) -> SourceLoc {
+        let end = self.reader.previous_loc();
+        self.start_loc.through(&end).unwrap_or_else(|| self.start_loc.clone())
     }
 }

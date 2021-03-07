@@ -47,8 +47,8 @@ fn escape_new_line_adds_to_token_length() {
     let mut lexer = Lexer::new(&env, callback);
     let tokens = lexer.lex_bytes(0, "+\\\n=\\\n+=+=\\\n".as_bytes());
     // The escape-newline is included in the length of the token if it occurs in the center.
-    assert_eq!(tokens[0].location().byte_length, 4);
+    assert_eq!(tokens[0].loc().byte_length, 4);
     // The escape-newline is not included in the length of the token if it is at the start or ending.
-    assert_eq!(tokens[1].location().byte_length, 2);
-    assert_eq!(tokens[2].location().byte_length, 2);
+    assert_eq!(tokens[1].loc().byte_length, 2);
+    assert_eq!(tokens[2].loc().byte_length, 2);
 }

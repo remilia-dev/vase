@@ -9,7 +9,7 @@ use crate::{
     util::{
         enum_with_properties,
         PtrEquality,
-        SourceLocation,
+        SourceLoc,
         Utf8DecodeError,
     },
 };
@@ -17,7 +17,7 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct LexerError {
     pub kind: LexerErrorKind,
-    pub location: SourceLocation,
+    pub loc: SourceLoc,
 }
 
 impl CodedError for LexerError {

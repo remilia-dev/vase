@@ -22,7 +22,7 @@ use crate::{
         enum_with_properties,
         CachedString,
         FileId,
-        SourceLocation,
+        SourceLoc,
     },
 };
 
@@ -120,7 +120,7 @@ enum_with_properties! {
         #[values(Error, 565)]
         StringifyNonParameter(Token),
         #[values(Error, 570)]
-        InvalidJoin(Token, SourceLocation, Token),
+        InvalidJoin(Token, SourceLoc, Token),
         #[values(Error, 580)]
         StrayHash,
         #[values(Error, 581)]
