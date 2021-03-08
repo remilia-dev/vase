@@ -1,6 +1,7 @@
 // Copyright 2021. remilia-dev
 // This source code is licensed under GPLv3 or any later version.
 use crate::{
+    c::TokenKind,
     error::{
         CodedError,
         Severity,
@@ -8,7 +9,6 @@ use crate::{
     sync::Arc,
     util::{
         enum_with_properties,
-        PtrEquality,
         SourceLoc,
         Utf8DecodeError,
     },
@@ -35,24 +35,24 @@ impl CodedError for LexerError {
 }
 
 enum_with_properties! {
-    #[derive(Clone, Debug, Eq, PartialEq)]
+    #[derive(Clone, Debug)]
     pub enum LexerErrorKind {
         // == Fatals
         #[values(Fatal, 800)]
         Utf8Decode(Utf8DecodeError),
         #[values(Fatal, 801)]
-        Io(PtrEquality<Arc<std::io::Error>>),
+        Io(Arc<std::io::Error>),
         // == Errors
         #[values(Error, 500)]
-        MissingCorrespondingIf,
+        MissingCorrespondingIf(TokenKind),
         #[values(Error, 501)]
-        MissingCorrespondingEndIf,
+        MissingCorrespondingEndIf(TokenKind),
         #[values(Error, 510)]
         UnendedComment,
         #[values(Error, 511)]
-        UnendedInclude,
+        UnendedInclude(bool),
         #[values(Error, 512)]
-        UnendedString,
+        UnendedString(bool),
         // NOTE: Error codes 600-610 and warning codes 300-310 are reserved for literals
     }
 
