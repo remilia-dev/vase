@@ -101,7 +101,7 @@ where OnError: FnMut(TravelerError) -> bool
                 },
                 PreElse { link } => {
                     let should_chain_skip = self.frames.should_chain_skip();
-                    self.ensure_end_of_preprocessor(Error::ExtraTokensInElse)?;
+                    self.ensure_end_of_preprocessor(Error::ElseExtraTokens)?;
                     if should_chain_skip {
                         self.frames.skip_to(link, true);
                     }
@@ -110,7 +110,7 @@ where OnError: FnMut(TravelerError) -> bool
                     // Pre blank doesn't have a corresponding PreEnd
                     self.frames.move_forward();
                 },
-                PreEndIf => self.ensure_end_of_preprocessor(Error::ExtraTokensInEndIf)?,
+                PreEndIf => self.ensure_end_of_preprocessor(Error::EndIfExtraTokens)?,
                 PreDefine => self.handle_define()?,
                 PreUndef => self.handle_undef()?,
                 PreLine => {
@@ -213,7 +213,7 @@ where OnError: FnMut(TravelerError) -> bool
             },
         };
 
-        self.ensure_end_of_preprocessor(Error::ExtraTokensInIfDef(if_def))?;
+        self.ensure_end_of_preprocessor(Error::IfDefExtraTokens(if_def))?;
 
         if defined != if_def {
             self.frames.skip_to(link, false);
@@ -367,7 +367,7 @@ where OnError: FnMut(TravelerError) -> bool
             },
         };
 
-        self.ensure_end_of_preprocessor(Error::ExtraTokensInUndef)?;
+        self.ensure_end_of_preprocessor(Error::UndefExtraTokens)?;
         Ok(())
     }
 
@@ -407,7 +407,7 @@ where OnError: FnMut(TravelerError) -> bool
         };
 
         if !matches!(*self.frames.move_forward().kind(), PreEnd) {
-            self.report_error(Error::ExtraTokensInInclude)?;
+            self.report_error(Error::IncludeExtraTokens)?;
             while !matches!(*self.frames.move_forward().kind(), PreEnd) {}
         }
 

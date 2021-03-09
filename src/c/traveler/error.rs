@@ -69,6 +69,8 @@ enum_with_properties! {
         IfDefMissingId(bool),
         #[values(Error, 501)]
         IfDefExpectedId(bool, Token),
+        #[values(Error, 502)]
+        IfDefExtraTokens(bool),
         #[values(Error, 510)]
         IfExpectedAtom(bool, Token),
         #[values(Error, 511)]
@@ -85,6 +87,10 @@ enum_with_properties! {
         IfDiv0(Sign, Box<BinaryExpr>),
         #[values(Error, 517)]
         IfReal(bool, Token),
+        #[values(Error, 520)]
+        ElseExtraTokens,
+        #[values(Error, 521)]
+        EndIfExtraTokens,
         #[values(Error, 530)]
         DefineMissingId,
         #[values(Error, 531)]
@@ -101,11 +107,15 @@ enum_with_properties! {
         UndefMissingId,
         #[values(Error, 541)]
         UndefExpectedId(Token),
+        #[values(Error, 542)]
+        UndefExtraTokens,
         #[values(Error, 550)]
         IncludePathMissing,
         #[values(Error, 551)]
         IncludeExpectedPath(Token),
         #[values(Error, 552)]
+        IncludeExtraTokens,
+        #[values(Error, 553)]
         IncludeNotFound(IncludeType, CachedString),
         #[values(Error, 560)]
         FuncInvokeMissingArgs(usize),
@@ -132,16 +142,6 @@ enum_with_properties! {
         #[values(Error, 590)]
         UnknownPreprocessor(CachedString),
         // == Warning
-        #[values(Warning, 200)]
-        ExtraTokensInIfDef(bool),
-        #[values(Warning, 201)]
-        ExtraTokensInElse,
-        #[values(Warning, 202)]
-        ExtraTokensInEndIf,
-        #[values(Warning, 203)]
-        ExtraTokensInUndef,
-        #[values(Warning, 204)]
-        ExtraTokensInInclude,
         #[values(Warning, 210)]
         CommaInIfCondition,
         #[values(Warning, 211)]
