@@ -123,9 +123,9 @@ enum_with_properties! {
         #[values(Error, 601)]
         EmptyExponent,
         #[values(Error, 602)]
-        InvalidIntSuffix(Box<[u8]>),
+        InvalidIntSuffix(String),
         #[values(Error, 603)]
-        InvalidRealSuffix(Box<[u8]>),
+        InvalidRealSuffix(String),
         // == Warnings
         #[values(Warning, 300)]
         OverflowOccured(bool),
@@ -222,6 +222,7 @@ impl<'a, E: OnLiteralError> LiteralDecoder<'a, E> {
     }
 
     fn calc_number(&mut self) -> MayUnwind<LiteralKind> {
+        self.report_empty_segments()?;
         let suffix = self.decode_suffix()?;
 
         match suffix {
@@ -358,11 +359,22 @@ impl<'a, E: OnLiteralError> LiteralDecoder<'a, E> {
     }
 
     fn report_invalid_suffix(&mut self) -> MayUnwind<()> {
+        let suffix = String::from_utf8(self.suffix.into()).unwrap();
         if self.has_dot {
-            (self.on_error)(LiteralError::InvalidRealSuffix(self.suffix.into()))
+            (self.on_error)(LiteralError::InvalidRealSuffix(suffix))
         } else {
-            (self.on_error)(LiteralError::InvalidIntSuffix(self.suffix.into()))
+            (self.on_error)(LiteralError::InvalidIntSuffix(suffix))
         }
+    }
+
+    fn report_empty_segments(&mut self) -> MayUnwind<()> {
+        if self.number.is_empty() {
+            (self.on_error)(LiteralError::EmptyNumber)?;
+        }
+        if self.exp_base.is_some() && self.suffix.is_empty() {
+            (self.on_error)(LiteralError::EmptyExponent)?;
+        }
+        Ok(())
     }
 }
 
