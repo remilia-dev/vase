@@ -47,6 +47,12 @@ impl Token {
     }
 }
 
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.kind.fmt(f)
+    }
+}
+
 #[repr(u8)]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TokenKind {
@@ -538,6 +544,7 @@ pub enum IncludeType {
     IncludeLocal,  // For #include "file"
     IncludeNext,   // For #include_next "file"
 }
+
 impl IncludeType {
     pub fn is_end_char(self, c: char) -> bool {
         match c {
@@ -553,6 +560,16 @@ impl IncludeType {
 
     pub fn ignore_own_file(self) -> bool {
         return matches!(self, IncludeType::IncludeNext);
+    }
+}
+
+impl fmt::Display for IncludeType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            Self::IncludeSystem => write!(f, "system include"),
+            Self::IncludeLocal => write!(f, "local/relative include"),
+            Self::IncludeNext => write!(f, "#include_next include"),
+        }
     }
 }
 

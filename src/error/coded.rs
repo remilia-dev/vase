@@ -29,4 +29,6 @@ pub trait CodedError {
     fn code(&self) -> String {
         format!("{}{}", self.code_prefix(), self.code_number())
     }
+    /// Constructs the message of error.
+    fn message(&self) -> String;
 }

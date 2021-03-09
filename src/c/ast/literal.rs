@@ -146,6 +146,32 @@ enum_with_properties! {
             // The code numbers for this error should be unique with respect to LexerError.
             "C-L"
         }
+
+        fn message(&self) -> String {
+            use LiteralError::*;
+            match *self {
+                // == Errors
+                EmptyNumber => "This number has no digits.".to_owned(),
+                EmptyExponent => "The exponent of this number has no digits.".to_owned(),
+                InvalidIntSuffix(ref suffix) => format!(
+                    "'{}' is not a valid suffix for an integer number.",
+                    suffix
+                ),
+                InvalidRealSuffix(ref suffix) => format!(
+                    "'{}' is not a valid suffix for a real number.",
+                    suffix
+                ),
+                // == Warnings
+                OverflowOccured(is_exp) => format!(
+                    "Overflow occured while parsing this number{}.",
+                    if is_exp { "'s exponent" } else { "" }
+                ),
+                ExcessPrecision(digits) => format!(
+                    "The last {} digits have no effect on the number.",
+                    digits
+                ),
+            }
+        }
     }
 }
 

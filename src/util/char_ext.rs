@@ -175,12 +175,12 @@ impl std::fmt::Display for Utf8DecodeError {
         match *self {
             Self::InvalidByte { byte_position, bad_byte } => write!(
                 f,
-                "The byte at 0x{:X?} is an invalid value (0x{:X?}).",
+                "The byte at 0x{:X?} is an invalid value (0x{:X?}) that never occurs in UTF-8.",
                 byte_position, bad_byte
             ),
             Self::InvalidCharacter { byte_position, bad_codepoint } => write!(
                 f,
-                "Read an invalid codepoint (0x{:X?}) at byte 0x{:X?}.",
+                "An invalid codepoint (0x{:X?}) occured at byte 0x{:X?}.",
                 bad_codepoint, byte_position
             ),
             Self::OverlongEncoding {

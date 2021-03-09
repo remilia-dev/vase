@@ -32,6 +32,10 @@ impl CodedError for LexerError {
     fn code_prefix(&self) -> &'static str {
         self.kind.code_prefix()
     }
+
+    fn message(&self) -> String {
+        self.kind.message()
+    }
 }
 
 enum_with_properties! {
@@ -66,6 +70,41 @@ enum_with_properties! {
 
         fn code_prefix(&self) -> &'static str {
             "C-L"
+        }
+
+        fn message(&self) -> String {
+            use LexerErrorKind::*;
+            match *self {
+                Utf8Decode(ref error) => format!(
+                    "{}. Only UTF-8 text is supported.",
+                    error
+                ),
+                Io(ref error) => format!(
+                    "An IO error occured. {}",
+                    error
+                ),
+                MissingCorrespondingIf(ref end_token) => format!(
+                    "{} does not have a corresponding #if, #ifdef, #ifndef, or #elif.",
+                    end_token
+                ),
+                MissingCorrespondingEndIf(ref start_token) => format!(
+                    "{} does not have a corresponding #elif, #else, or #endif.",
+                    start_token
+                ),
+                UnendedComment => {
+                    "The multiline comment was not properly ended before the end of the file."
+                        .to_owned()
+                },
+                UnendedInclude(is_sys) => format!(
+                    "Include was not properly ended with a {} before the end of the line.",
+                    if is_sys { '>' } else { '"' }
+                ),
+                UnendedString(is_char) => format!(
+                    "{} was not ended properly with a {} before the end of the line.",
+                    if is_char { "Character" } else { "String" },
+                    if is_char { '\'' } else { '"' }
+                ),
+            }
         }
     }
 }
