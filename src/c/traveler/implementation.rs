@@ -144,7 +144,7 @@ where OnError: FnMut(TravelerError) -> bool
                 },
                 LexerError(index) => {
                     let error = self.frames.get_current_file().errors()[index].clone();
-                    self.report_error(Error::LexerError(error))?;
+                    self.report_error(error.into())?;
                     self.frames.move_forward();
                 },
                 Hash { .. } => {

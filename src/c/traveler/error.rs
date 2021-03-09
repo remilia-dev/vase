@@ -175,3 +175,14 @@ enum_with_properties! {
         }
     }
 }
+impl From<LexerError> for TravelerErrorKind {
+    fn from(error: LexerError) -> Self {
+        TravelerErrorKind::LexerError(error)
+    }
+}
+
+impl From<LiteralError> for TravelerErrorKind {
+    fn from(error: LiteralError) -> Self {
+        TravelerErrorKind::LiteralError(error)
+    }
+}

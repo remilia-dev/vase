@@ -9,6 +9,7 @@ use crate::{
             BinaryOp,
             Expr,
             Literal,
+            LiteralError,
             LiteralKind,
             ParenExpr,
             Precedence,
@@ -246,8 +247,8 @@ where OnError: FnMut(TravelerError) -> bool
     }
 
     fn parse_number(&mut self, loc: SourceLoc, digits: CachedString) -> MayUnwind<Box<Expr>> {
-        let mut kind = LiteralKind::from_number(digits.as_ref(), |err| {
-            self.report_error(Error::LiteralError(err))
+        let mut kind = LiteralKind::from_number(digits.as_ref(), |err: LiteralError| {
+            self.report_error(err.into())
         })?;
         if kind.is_real() {
             let error = Error::IfReal(self.is_if, self.clone_head());
@@ -270,8 +271,8 @@ where OnError: FnMut(TravelerError) -> bool
         chars: &str,
         enc: StringEncoding,
     ) -> MayUnwind<Box<Expr>> {
-        let kind = LiteralKind::from_character(chars, enc, |err| {
-            self.report_error(Error::LiteralError(err))
+        let kind = LiteralKind::from_character(chars, enc, |err: LiteralError| {
+            self.report_error(err.into())
         })?;
         Ok(Box::new(Literal { loc, kind }.into()))
     }
