@@ -1,5 +1,7 @@
 // Copyright 2021. remilia-dev
 // This source code is licensed under GPLv3 or any later version.
+use std::fmt;
+
 use crate::{
     c::TokenKind,
     util::enum_with_properties,
@@ -98,43 +100,60 @@ impl std::convert::TryFrom<&TokenKind> for PrefixOp {
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum BinaryOp {
-    Multiplication,
-    Divide,
-    Modulo,
-    Addition,
-    Subtraction,
-    LShift,
-    RShift,
-    LessThan,
-    LessThanOrEqual,
-    GreaterThan,
-    GreaterThanOrEqual,
-    Equals,
-    NotEquals,
-    BitAnd,
-    BitXor,
-    BitOr,
-    LogicalAnd,
-    LogicalOr,
+enum_with_properties! {
+    #[derive(Copy, Clone, Debug, Eq, PartialEq)]
+    pub enum BinaryOp {
+        #[values("*", Multiplicative)]
+        Multiplication,
+        #[values("/", Multiplicative)]
+        Divide,
+        #[values("%", Multiplicative)]
+        Modulo,
+        #[values("+", Additive)]
+        Addition,
+        #[values("-", Additive)]
+        Subtraction,
+        #[values("<<", Shifting)]
+        LShift,
+        #[values(">>", Shifting)]
+        RShift,
+        #[values("<", Relational)]
+        LessThan,
+        #[values("<=", Relational)]
+        LessThanOrEqual,
+        #[values(">", Relational)]
+        GreaterThan,
+        #[values(">=", Relational)]
+        GreaterThanOrEqual,
+        #[values("==", Equality)]
+        Equals,
+        #[values("!=", Equality)]
+        NotEquals,
+        #[values("&", BitAnd)]
+        BitAnd,
+        #[values("^", BitXor)]
+        BitXor,
+        #[values("|", BitOr)]
+        BitOr,
+        #[values("&&", LogicalAnd)]
+        LogicalAnd,
+        #[values("||", LogicalOr)]
+        LogicalOr,
+    }
+
+    impl BinaryOp {
+        #[property]
+        pub fn text(self) -> &'static str {}
+        #[property]
+        pub fn precedence(self) -> Precedence {
+            use Precedence::*;
+        }
+    }
 }
 
-impl BinaryOp {
-    pub fn precedence(self) -> Precedence {
-        use BinaryOp::*;
-        match self {
-            Multiplication | Divide | Modulo => Precedence::Multiplicative,
-            Addition | Subtraction => Precedence::Additive,
-            LShift | RShift => Precedence::Shifting,
-            LessThan | LessThanOrEqual | GreaterThan | GreaterThanOrEqual => Precedence::Relational,
-            Equals | NotEquals => Precedence::Equality,
-            BitAnd => Precedence::BitAnd,
-            BitXor => Precedence::BitXor,
-            BitOr => Precedence::BitOr,
-            LogicalAnd => Precedence::LogicalAnd,
-            LogicalOr => Precedence::LogicalOr,
-        }
+impl fmt::Display for BinaryOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.text())
     }
 }
 
