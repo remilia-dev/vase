@@ -82,21 +82,22 @@ where OnError: FnMut(TravelerError) -> bool
                 continue;
             }
 
-            match *self.frames.head().kind() {
+            let head = self.frames.head();
+            match *head.kind() {
                 PreIf { link } => {
-                    self.handle_if(true, link)?;
+                    let head = head.clone();
+                    self.handle_if(head, link)?;
                 },
-                PreIfDef { link } => {
-                    self.handle_if_def(true, link)?;
-                },
-                PreIfNDef { link } => {
-                    self.handle_if_def(false, link)?;
+                PreIfDef { link } | PreIfNDef { link } => {
+                    let head = head.clone();
+                    self.handle_if_def(head, link)?;
                 },
                 PreElif { link } => {
                     if self.frames.should_chain_skip() {
                         self.frames.skip_to(link, true);
                     } else {
-                        self.handle_if(false, link)?;
+                        let head = head.clone();
+                        self.handle_if(head, link)?;
                     }
                 },
                 PreElse { link } => {
@@ -171,9 +172,18 @@ where OnError: FnMut(TravelerError) -> bool
         Ok(self.frames.head())
     }
 
-    fn handle_if(&mut self, is_if: bool, link: usize) -> MayUnwind<()> {
-        self.frames.move_forward();
-        let mut expr = match IfParser::create_and_parse(self, is_if) {
+    fn move_slightly_forward(&mut self) -> MayUnwind<&Token> {
+        while let LexerError(index) = *self.frames.move_forward().kind() {
+            let error = self.frames.get_current_file().errors()[index].clone();
+            self.report_error(error.into())?;
+        }
+
+        Ok(self.frames.head())
+    }
+
+    fn handle_if(&mut self, if_token: Token, link: usize) -> MayUnwind<()> {
+        self.move_forward()?;
+        let mut expr = match IfParser::create_and_parse(self, &if_token) {
             Ok(expr) => expr,
             Err(Unwind::Block) => {
                 // We failed to parse the if condition, so we assume it's false.
@@ -184,7 +194,7 @@ where OnError: FnMut(TravelerError) -> bool
         };
         // Move past the PreEnd token.
         self.move_forward()?;
-        match IfEvaluator::calc(&mut expr, |err| self.report_error(err)) {
+        match IfEvaluator::calc(&mut expr, if_token, |err| self.report_error(err)) {
             Ok(true) => Ok(()),
             Ok(false) | Err(Unwind::Block) => {
                 self.frames.skip_to(link, false);
@@ -194,8 +204,9 @@ where OnError: FnMut(TravelerError) -> bool
         }
     }
 
-    fn handle_if_def(&mut self, if_def: bool, link: usize) -> MayUnwind<()> {
-        let defined = match *self.frames.move_forward().kind() {
+    fn handle_if_def(&mut self, if_def: Token, link: usize) -> MayUnwind<()> {
+        let is_ifdef = matches!(if_def.kind(), &PreIfDef { .. });
+        let defined = match *self.move_slightly_forward()?.kind() {
             ref token if token.is_definable() => {
                 let macro_id = token.get_definable_id();
                 self.frames.has_macro(macro_id)
@@ -209,15 +220,14 @@ where OnError: FnMut(TravelerError) -> bool
         };
 
         self.ensure_end_of_preprocessor(Error::IfDefExtraTokens(if_def))?;
-
-        if defined != if_def {
+        if defined != is_ifdef {
             self.frames.skip_to(link, false);
         }
         Ok(())
     }
 
     fn handle_define(&mut self) -> MayUnwind<()> {
-        let macro_id = match *self.frames.move_forward().kind() {
+        let macro_id = match *self.move_slightly_forward()?.kind() {
             ref token if token.is_definable() => token.get_definable_id(),
             _ => {
                 let error = Error::DefineExpectedId(self.frames.head().clone());
@@ -227,7 +237,7 @@ where OnError: FnMut(TravelerError) -> bool
             },
         };
 
-        let head = self.frames.move_forward();
+        let head = self.move_slightly_forward()?;
         match *head.kind() {
             PreEnd => {
                 // TODO: Ensure the previous macro was empty (otherwise report warning)
@@ -244,7 +254,7 @@ where OnError: FnMut(TravelerError) -> bool
         let mut params = Vec::new();
         let mut var_arg = None;
         loop {
-            match *self.frames.move_forward().kind() {
+            match *self.move_slightly_forward()?.kind() {
                 ref token if token.is_definable() => params.push(token.get_definable_id()),
                 DotDotDot => {
                     var_arg = Some(self.env.cache().get_or_cache("__VA_ARGS__").uniq_id());
@@ -265,7 +275,7 @@ where OnError: FnMut(TravelerError) -> bool
                 },
             }
 
-            match *self.frames.move_forward().kind() {
+            match *self.move_slightly_forward()?.kind() {
                 Comma => continue,
                 DotDotDot => {
                     var_arg = Some(params.pop().unwrap());
@@ -339,7 +349,7 @@ where OnError: FnMut(TravelerError) -> bool
     }
 
     fn handle_undef(&mut self) -> MayUnwind<()> {
-        match *self.frames.move_forward().kind() {
+        match *self.move_slightly_forward()?.kind() {
             ref token if token.is_definable() => {
                 let macro_id = token.get_definable_id();
                 self.frames.remove_macro(macro_id);
@@ -357,7 +367,7 @@ where OnError: FnMut(TravelerError) -> bool
     }
 
     fn handle_include(&mut self, _include_next: bool) -> MayUnwind<()> {
-        // We use self.move_forward to allow for macros to be decoded.
+        // We use self.move_forward to allow for macros to be used.
         let inc_file = match *self.move_forward()?.kind() {
             IncludePath { ref path, inc_type } => {
                 let path = path.clone();
@@ -370,7 +380,7 @@ where OnError: FnMut(TravelerError) -> bool
                     return result;
                 }
             },
-            String { .. } => {
+            String { is_char: false, .. } => {
                 self.report_error(Error::Unimplemented("Include indirection with quotes"))?;
                 unreachable!()
             },
@@ -400,7 +410,7 @@ where OnError: FnMut(TravelerError) -> bool
 
     fn handle_message(&mut self, is_error: bool) -> MayUnwind<()> {
         let state = self.save_state();
-        let message = match *self.frames.move_forward().kind() {
+        let message = match *self.move_slightly_forward()?.kind() {
             Message(ref text) => {
                 let text = text.clone();
                 // The next token *should* be a PreEnd token.
@@ -433,7 +443,7 @@ where OnError: FnMut(TravelerError) -> bool
         self.str_builder.clear();
         let first_token = self.head().clone();
         let join_loc = self.frames.move_forward().loc().clone();
-        let second_token = self.frames.move_forward().clone();
+        let second_token = self.move_slightly_forward()?.clone();
 
         if let Some(joined) = self.attempt_join(&first_token, &second_token) {
             let joined_token = Token::new(join_loc, true, joined);
@@ -551,6 +561,10 @@ where OnError: FnMut(TravelerError) -> bool
     }
 
     fn skip_past_preprocessor(&mut self) -> usize {
+        if matches!(self.frames.head().kind(), &PreEnd) {
+            self.frames.move_forward();
+            return 0;
+        }
         // We start with 1 because we'll always move at least 1 token forward.
         let mut count = 1usize;
         while !matches!(self.frames.move_forward().kind(), &PreEnd) {

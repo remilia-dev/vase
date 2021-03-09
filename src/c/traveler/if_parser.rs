@@ -39,7 +39,7 @@ pub struct IfParser<'a, OnError>
 where OnError: FnMut(TravelerError) -> bool
 {
     traveler: &'a mut Traveler<OnError>,
-    is_if: bool,
+    if_token: &'a Token,
     defined_id: usize,
 }
 
@@ -48,10 +48,10 @@ where OnError: FnMut(TravelerError) -> bool
 {
     pub fn create_and_parse(
         traveler: &'a mut Traveler<OnError>,
-        is_if: bool,
+        if_token: &'a Token,
     ) -> MayUnwind<Box<Expr>> {
         let defined_id = traveler.env.cache().get_or_cache("defined").uniq_id();
-        Self { traveler, is_if, defined_id }.parse_expression()
+        Self { traveler, if_token, defined_id }.parse_expression()
     }
 
     fn parse_expression(&mut self) -> MayUnwind<Box<Expr>> {
@@ -80,7 +80,7 @@ where OnError: FnMut(TravelerError) -> bool
                 },
                 RParen | Colon | PreEnd => break,
                 _ => {
-                    let error = Error::IfExpectedOp(self.is_if, head.clone());
+                    let error = Error::IfExpectedOp(self.if_token.clone(), head.clone());
                     self.report_error(error)?;
                     return Err(Unwind::Block);
                 },
@@ -103,7 +103,7 @@ where OnError: FnMut(TravelerError) -> bool
         let colon_loc = if matches!(*maybe_colon.kind(), Colon) {
             maybe_colon.loc().clone()
         } else {
-            let error = Error::IfTernaryExpectedColon(self.is_if, self.clone_head());
+            let error = Error::IfTernaryExpectedColon(self.if_token.clone(), self.clone_head());
             self.report_error(error)?;
             return Err(Unwind::Block);
         };
@@ -136,7 +136,7 @@ where OnError: FnMut(TravelerError) -> bool
             Identifier(..) => {
                 let loc = head.loc().clone();
                 self.move_forward()?;
-                Ok(Box::new(Literal { loc, kind: 0i32.into() }.into()))
+                Ok(Box::new(Literal { loc, kind: 0i64.into() }.into()))
             },
             Number(ref digits) => {
                 let digits = digits.clone();
@@ -166,12 +166,12 @@ where OnError: FnMut(TravelerError) -> bool
             },
             PreEnd => {
                 let loc = head.loc().clone();
-                let error = Error::IfExpectedAtom(self.is_if, head.clone());
+                let error = Error::IfExpectedAtom(self.if_token.clone(), head.clone());
                 self.report_error(error)?;
-                Ok(Box::new(Literal { loc, kind: 0i32.into() }.into()))
+                Ok(Box::new(Literal { loc, kind: 0i64.into() }.into()))
             },
             _ => {
-                let error = Error::IfExpectedAtom(self.is_if, head.clone());
+                let error = Error::IfExpectedAtom(self.if_token.clone(), head.clone());
                 self.report_error(error)?;
                 // Cascade up to the if condition. We can't parse the expression.
                 Err(Unwind::Block)
@@ -180,47 +180,47 @@ where OnError: FnMut(TravelerError) -> bool
     }
 
     fn parse_defined(&mut self, loc: SourceLoc) -> MayUnwind<Box<Expr>> {
-        let id = match *self.move_frame_forward().kind() {
-            ref id if id.is_definable() => {
-                let check_id = id.get_definable_id();
+        let (head, has_parens) = match self.move_frame_forward() {
+            token if matches!(token.kind(), &LParen) => (self.move_frame_forward(), true),
+            token => (token, false),
+        };
+
+        let id = match *head.kind() {
+            ref kind if kind.is_definable() => kind.get_definable_id(),
+            RParen if has_parens => {
+                let error = Error::IfDefinedNotDefinable(
+                    self.if_token.clone(),
+                    has_parens,
+                    self.clone_head(),
+                );
+                self.report_error(error)?;
                 self.move_forward()?;
-                check_id
-            },
-            LParen => {
-                let id = match *self.move_frame_forward().kind() {
-                    ref id if id.is_definable() => id.get_definable_id(),
-                    PreEnd => {
-                        let error = Error::IfDefinedNotDefinable(self.is_if, self.clone_head());
-                        self.report_error(error)?;
-                        return Ok(Box::new(Literal { loc, kind: 0i32.into() }.into()));
-                    },
-                    _ => {
-                        let error = Error::IfDefinedNotDefinable(self.is_if, self.clone_head());
-                        self.report_error(error)?;
-                        0 // A unique id of 0 will never show up
-                    },
-                };
-
-                if !matches!(*self.move_forward()?.kind(), RParen) {
-                    let error = Error::IfDefinedExpectedRParen(self.is_if, self.clone_head());
-                    self.report_error(error)?;
-                } else {
-                    self.move_forward()?;
-                }
-
-                id
+                return Ok(Box::new(Literal { loc, kind: 0i64.into() }.into()));
             },
             _ => {
-                let error = Error::IfDefinedNotDefinable(self.is_if, self.clone_head());
-                if !matches!(*self.head().kind(), PreEnd) {
-                    self.move_forward()?;
-                }
+                let error = Error::IfDefinedNotDefinable(
+                    self.if_token.clone(),
+                    has_parens,
+                    self.clone_head(),
+                );
                 self.report_error(error)?;
                 0 // A unique id of 0 will never show up
             },
         };
 
-        let value = self.traveler.frames.has_macro(id) as i32;
+        match *self.move_frame_forward().kind() {
+            RParen if has_parens => {
+                self.move_forward()?;
+            },
+            _ if has_parens => {
+                let error =
+                    Error::IfDefinedExpectedRParen(self.if_token.clone(), self.clone_head());
+                self.report_error(error)?;
+            },
+            _ => {},
+        }
+
+        let value = self.traveler.frames.has_macro(id) as i64;
         Ok(Box::new(Literal { loc, kind: value.into() }.into()))
     }
 
@@ -236,7 +236,7 @@ where OnError: FnMut(TravelerError) -> bool
                 Some(loc)
             },
             _ => {
-                let error = Error::IfExpectedRParen(self.is_if, self.clone_head());
+                let error = Error::IfExpectedRParen(self.if_token.clone(), self.clone_head());
                 self.report_error(error)?;
                 None
             },
@@ -251,7 +251,7 @@ where OnError: FnMut(TravelerError) -> bool
             self.report_error(err.into())
         })?;
         if kind.is_real() {
-            let error = Error::IfReal(self.is_if, self.clone_head());
+            let error = Error::IfReal(self.if_token.clone(), self.clone_head());
             self.report_error(error)?;
         }
         kind = match kind {

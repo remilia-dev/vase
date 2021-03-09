@@ -3,7 +3,10 @@
 use std::convert::TryInto;
 
 use crate::{
-    c::ast::*,
+    c::{
+        ast::*,
+        Token,
+    },
     error::{
         MayUnwind,
         Unwind,
@@ -20,6 +23,7 @@ pub trait OnError = FnMut(Error) -> MayUnwind<()>;
 pub struct IfEvaluator<E: OnError> {
     accum: Option<Sign>,
     on_error: E,
+    if_token: Token,
 }
 
 impl<E: OnError> ExprVisitor for IfEvaluator<E> {
@@ -151,8 +155,8 @@ impl<E: OnError> ExprVisitor for IfEvaluator<E> {
 }
 
 impl<E: OnError> IfEvaluator<E> {
-    pub fn calc(e: &mut Expr, on_error: E) -> MayUnwind<bool> {
-        let mut visitor = IfEvaluator { accum: None, on_error };
+    pub fn calc(e: &mut Expr, if_token: Token, on_error: E) -> MayUnwind<bool> {
+        let mut visitor = IfEvaluator { accum: None, if_token, on_error };
         visitor.on_expr(e)?;
         Ok(visitor.accum.map_or(false, |v| !v.is_zero()))
     }
@@ -190,7 +194,11 @@ impl<E: OnError> IfEvaluator<E> {
         if let Some(v) = v {
             Ok(v)
         } else {
-            (self.on_error)(Error::IfDiv0(lhs.into(), expr.clone().into()))?;
+            (self.on_error)(Error::IfDiv0(
+                self.if_token.clone(),
+                lhs.into(),
+                expr.clone().into(),
+            ))?;
             Err(Unwind::Block)
         }
     }

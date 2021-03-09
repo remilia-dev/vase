@@ -66,27 +66,25 @@ enum_with_properties! {
         ErrorPreprocessor(Option<Arc<Box<str>>>),
         // == Errors
         #[values(Error, 500)]
-        IfDefMissingId(bool),
+        IfDefExpectedId(Token, Token),
         #[values(Error, 501)]
-        IfDefExpectedId(bool, Token),
-        #[values(Error, 502)]
-        IfDefExtraTokens(bool),
+        IfDefExtraTokens(Token),
         #[values(Error, 510)]
-        IfExpectedAtom(bool, Token),
+        IfExpectedAtom(Token, Token),
         #[values(Error, 511)]
-        IfExpectedOp(bool, Token),
+        IfExpectedOp(Token, Token),
         #[values(Error, 512)]
-        IfDefinedNotDefinable(bool, Token),
+        IfDefinedNotDefinable(Token, bool, Token),
         #[values(Error, 513)]
-        IfDefinedExpectedRParen(bool, Token),
+        IfDefinedExpectedRParen(Token, Token),
         #[values(Error, 514)]
-        IfExpectedRParen(bool, Token),
+        IfExpectedRParen(Token, Token),
         #[values(Error, 515)]
-        IfTernaryExpectedColon(bool, Token),
+        IfTernaryExpectedColon(Token, Token),
         #[values(Error, 516)]
-        IfDiv0(Sign, Box<BinaryExpr>),
+        IfDiv0(Token, Sign, Box<BinaryExpr>),
         #[values(Error, 517)]
-        IfReal(bool, Token),
+        IfReal(Token, Token),
         #[values(Error, 520)]
         ElseExtraTokens,
         #[values(Error, 521)]
