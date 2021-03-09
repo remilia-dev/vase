@@ -200,11 +200,6 @@ where OnError: FnMut(TravelerError) -> bool
                 let macro_id = token.get_definable_id();
                 self.frames.has_macro(macro_id)
             },
-            PreEnd => {
-                let result = self.report_error(Error::IfDefMissingId(if_def));
-                self.frames.skip_to(link, false);
-                return result;
-            },
             _ => {
                 let error = Error::IfDefExpectedId(if_def, self.frames.head().clone());
                 let result = self.report_error(error);
@@ -224,11 +219,6 @@ where OnError: FnMut(TravelerError) -> bool
     fn handle_define(&mut self) -> MayUnwind<()> {
         let macro_id = match *self.frames.move_forward().kind() {
             ref token if token.is_definable() => token.get_definable_id(),
-            PreEnd => {
-                let result = self.report_error(Error::DefineMissingId);
-                self.frames.move_forward();
-                return result;
-            },
             _ => {
                 let error = Error::DefineExpectedId(self.frames.head().clone());
                 let result = self.report_error(error);
@@ -354,11 +344,6 @@ where OnError: FnMut(TravelerError) -> bool
                 let macro_id = token.get_definable_id();
                 self.frames.remove_macro(macro_id);
             },
-            PreEnd => {
-                let result = self.report_error(Error::UndefMissingId);
-                self.frames.move_forward();
-                return result;
-            },
             _ => {
                 let error = Error::UndefExpectedId(self.frames.head().clone());
                 let result = self.report_error(error);
@@ -392,11 +377,6 @@ where OnError: FnMut(TravelerError) -> bool
             LAngle => {
                 self.report_error(Error::Unimplemented("Include indirection with <>"))?;
                 unreachable!()
-            },
-            PreEnd => {
-                let result = self.report_error(Error::IncludePathMissing);
-                self.frames.move_forward();
-                return result;
             },
             _ => {
                 let error = Error::IncludeExpectedPath(self.head().clone());

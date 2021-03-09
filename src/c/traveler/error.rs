@@ -92,30 +92,24 @@ enum_with_properties! {
         #[values(Error, 521)]
         EndIfExtraTokens,
         #[values(Error, 530)]
-        DefineMissingId,
-        #[values(Error, 531)]
         DefineExpectedId(Token),
-        #[values(Error, 532)]
+        #[values(Error, 531)]
         DefineFuncEndBeforeEndOfArgs,
-        #[values(Error, 533)]
+        #[values(Error, 532)]
         DefineFuncExpectedArg(Token),
-        #[values(Error, 534)]
+        #[values(Error, 533)]
         DefineFuncExpectedSeparator(Token),
-        #[values(Error, 535)]
+        #[values(Error, 534)]
         DefineFuncExpectedEndOfArgs(Token),
         #[values(Error, 540)]
-        UndefMissingId,
-        #[values(Error, 541)]
         UndefExpectedId(Token),
-        #[values(Error, 542)]
+        #[values(Error, 541)]
         UndefExtraTokens,
         #[values(Error, 550)]
-        IncludePathMissing,
-        #[values(Error, 551)]
         IncludeExpectedPath(Token),
-        #[values(Error, 552)]
+        #[values(Error, 551)]
         IncludeExtraTokens,
-        #[values(Error, 553)]
+        #[values(Error, 552)]
         IncludeNotFound(IncludeType, CachedString),
         #[values(Error, 560)]
         FuncInvokeMissingArgs(usize),
