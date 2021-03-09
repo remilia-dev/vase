@@ -1,8 +1,11 @@
 // Copyright 2021. remilia-dev
 // This source code is licensed under GPLv3 or any later version.
-use std::convert::{
-    TryFrom,
-    TryInto,
+use std::{
+    convert::{
+        TryFrom,
+        TryInto,
+    },
+    fmt,
 };
 
 use crate::util::create_intos;
@@ -69,6 +72,15 @@ impl Sign {
                 Err(..) => (i as u64, true),
             },
             Self::Unsigned(u) => (u, false),
+        }
+    }
+}
+
+impl fmt::Display for Sign {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            Self::Signed(i) => write!(f, "{}", i),
+            Self::Unsigned(u) => write!(f, "{}", u),
         }
     }
 }
