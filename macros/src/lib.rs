@@ -7,6 +7,7 @@ use proc_macro::TokenStream;
 mod create_intos;
 mod enum_with_properties;
 mod util;
+mod variant_list;
 
 /// A macro to define an enum with specific properties.
 ///
@@ -81,4 +82,33 @@ pub fn enum_with_properties(input: TokenStream) -> TokenStream {
 pub fn create_intos(_: TokenStream, item: TokenStream) -> TokenStream {
     let enum_ = syn::parse_macro_input!(item as syn::ItemEnum);
     create_intos::create_intos(enum_)
+}
+
+/// A macro that generates a constant VARIANT array that contains each
+/// variant of the enum.
+///
+/// This macro can only be added to enums that only have field-less variants.
+///
+/// # Example
+/// ```
+/// # use vase_macros::variant_list;
+/// #[variant_list]
+/// enum Cardinal {
+///     North,
+///     East,
+///     South,
+///     West,
+/// }
+///
+/// #[test]
+/// fn variants() {
+///     assert!(Cardinal::VARIANTS.len(), 4);
+///     assert!(Cardinal::VARIANTS[1], Cardinal::East);
+///     assert!(Cardinal::VARIANTS[3], Cardinal::West);
+/// }
+/// ```
+#[proc_macro_attribute]
+pub fn variant_list(_: TokenStream, item: TokenStream) -> TokenStream {
+    let enum_ = syn::parse_macro_input!(item as syn::ItemEnum);
+    variant_list::variant_list(enum_)
 }

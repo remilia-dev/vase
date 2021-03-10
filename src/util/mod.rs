@@ -19,6 +19,7 @@ pub use string_cache::{
 pub use vase_macros::{
     create_intos,
     enum_with_properties,
+    variant_list,
 };
 /// Memory utilities.
 pub mod mem;
