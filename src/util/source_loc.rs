@@ -4,7 +4,7 @@ use std::convert::TryInto;
 
 use crate::math::NonMaxU32;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct SourceLoc {
     file_id: FileId,
     /// The byte in the file this location starts at.

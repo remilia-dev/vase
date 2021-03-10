@@ -61,7 +61,7 @@ where OnError: FnMut(TravelerError) -> bool
             let head = self.head();
             expression = match *head.kind() {
                 ref op if op.is_binary_op() => {
-                    let op_loc = head.loc().clone();
+                    let op_loc = head.loc();
                     let op: BinaryOp = op.try_into().unwrap();
                     self.move_forward()?;
                     let rhs = self.parse_atom()?;
@@ -70,7 +70,7 @@ where OnError: FnMut(TravelerError) -> bool
                     })
                 },
                 QMark => {
-                    let qmark_loc = head.loc().clone();
+                    let qmark_loc = head.loc();
                     self.parse_ternary(expression, qmark_loc)?
                 },
                 Comma => {
@@ -101,7 +101,7 @@ where OnError: FnMut(TravelerError) -> bool
 
         let maybe_colon = self.head();
         let colon_loc = if matches!(*maybe_colon.kind(), Colon) {
-            maybe_colon.loc().clone()
+            maybe_colon.loc()
         } else {
             let error = Error::IfTernaryExpectedColon(self.if_token.clone(), self.clone_head());
             self.report_error(error)?;
@@ -129,29 +129,29 @@ where OnError: FnMut(TravelerError) -> bool
         match *head.kind() {
             // 'defined macro_id' or 'defined(macro_id)'
             Identifier(ref id) if id.uniq_id() == self.defined_id => {
-                let loc = head.loc().clone();
+                let loc = head.loc();
                 self.parse_defined(loc)
             },
             // Undefined identifiers are replaced with 0s
             Identifier(..) => {
-                let loc = head.loc().clone();
+                let loc = head.loc();
                 self.move_forward()?;
                 Ok(Box::new(Literal { loc, kind: 0i64.into() }.into()))
             },
             Number(ref digits) => {
                 let digits = digits.clone();
-                let loc = head.loc().clone();
+                let loc = head.loc();
                 self.parse_number(loc, digits)
             },
             Plus | Minus | Tilde | Bang => {
                 let op: PrefixOp = head.kind().try_into().unwrap();
-                let op_loc = head.loc().clone();
+                let op_loc = head.loc();
                 self.move_forward()?;
                 let expr = self.parse_atom()?;
                 Ok(Box::new(PrefixExpr { op, op_loc, expr }.into()))
             },
             LParen { .. } => {
-                let lparen_loc = Some(head.loc().clone());
+                let lparen_loc = Some(head.loc());
                 self.parse_parens(lparen_loc)
             },
             String {
@@ -161,11 +161,11 @@ where OnError: FnMut(TravelerError) -> bool
                 ..
             } => {
                 let str_data = str_data.clone();
-                let loc = head.loc().clone();
+                let loc = head.loc();
                 self.parse_char(loc, &*str_data, encoding)
             },
             PreEnd => {
-                let loc = head.loc().clone();
+                let loc = head.loc();
                 let error = Error::IfExpectedAtom(self.if_token.clone(), head.clone());
                 self.report_error(error)?;
                 Ok(Box::new(Literal { loc, kind: 0i64.into() }.into()))
@@ -231,7 +231,7 @@ where OnError: FnMut(TravelerError) -> bool
         let maybe_rparen = self.move_forward()?;
         let rparen_loc = match *maybe_rparen.kind() {
             RParen => {
-                let loc = maybe_rparen.loc().clone();
+                let loc = maybe_rparen.loc();
                 self.move_forward()?;
                 Some(loc)
             },

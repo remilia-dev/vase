@@ -584,6 +584,6 @@ impl<'a, OnInclude: IncludeCallback> LexerState<'a, OnInclude> {
 
     fn source_loc(&self) -> SourceLoc {
         let end = self.reader.previous_loc();
-        self.start_loc.through(&end).unwrap_or_else(|| self.start_loc.clone())
+        self.start_loc.through(&end).unwrap_or(self.start_loc)
     }
 }

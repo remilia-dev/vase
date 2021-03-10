@@ -33,8 +33,8 @@ impl Token {
         }
     }
 
-    pub fn loc(&self) -> &SourceLoc {
-        &self.loc
+    pub fn loc(&self) -> SourceLoc {
+        self.loc
     }
     pub fn whitespace_before(&self) -> bool {
         self.whitespace_before

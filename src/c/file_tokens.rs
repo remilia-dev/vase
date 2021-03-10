@@ -70,7 +70,7 @@ impl FileTokens {
 
     pub fn add_error_token(&mut self, error: LexerError) {
         let index = self.errors.len();
-        let loc = error.loc.clone();
+        let loc = error.loc;
         self.errors.push(error);
         let error_token = Token::new(loc, false, TokenKind::LexerError(index));
         self.append(error_token);

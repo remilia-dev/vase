@@ -450,7 +450,7 @@ impl FrameStack {
                     break;
                 },
                 Hash { .. } if self.frames.len() == function_frame => {
-                    let loc = head.loc().clone();
+                    let loc = head.loc();
                     let define = match self.move_forward().kind() {
                         token if token.is_definable() => token.get_definable_id(),
                         _ => {

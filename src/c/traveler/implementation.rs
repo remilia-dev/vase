@@ -442,7 +442,7 @@ where OnError: FnMut(TravelerError) -> bool
     fn handle_joiner(&mut self) -> MayUnwind<()> {
         self.str_builder.clear();
         let first_token = self.head().clone();
-        let join_loc = self.frames.move_forward().loc().clone();
+        let join_loc = self.frames.move_forward().loc();
         let second_token = self.move_slightly_forward()?.clone();
 
         if let Some(joined) = self.attempt_join(&first_token, &second_token) {
