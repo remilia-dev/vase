@@ -7,7 +7,7 @@ use criterion::{
 use parking_lot::RwLock;
 use vase::sync::OnceArray;
 
-const TEST_SIZE: usize = 100;
+const TEST_SIZE: u16 = 100;
 
 fn once_array_write(item: String) -> OnceArray<String> {
     let oa = OnceArray::new();
@@ -27,8 +27,8 @@ fn rwlock_write(item: String) -> RwLock<Vec<String>> {
 
 fn once_array_read(arr: &OnceArray<String>) -> u32 {
     let mut accum = 0u32;
-    for i in 0..TEST_SIZE as u32 {
-        accum += arr[i].len() as u32;
+    for i in 0..TEST_SIZE as u16 {
+        accum += arr[i.into()].len() as u32;
     }
     accum
 }
@@ -36,7 +36,7 @@ fn once_array_read(arr: &OnceArray<String>) -> u32 {
 fn rwlock_read(arr: &RwLock<Vec<String>>) -> usize {
     let mut accum = 0usize;
     for i in 0..TEST_SIZE {
-        accum += arr.read().get(i).unwrap().len();
+        accum += arr.read().get(i as usize).unwrap().len();
     }
     accum
 }
