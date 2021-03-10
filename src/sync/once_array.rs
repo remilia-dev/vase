@@ -1,9 +1,10 @@
 // Copyright 2021. remilia-dev
 // This source code is licensed under GPLv3 or any later version.
 use crate::{
+    math::NonMaxU32,
     sync::{
         AtomicBox,
-        AtomicUsize,
+        AtomicU32,
         Ordering,
     },
     util::mem::make_static_array,
@@ -14,6 +15,8 @@ use crate::{
 const NODE_SIZE: usize = 2048;
 /// The number of OnceArrayNodes a OnceArray can hold.
 const NODE_COUNT: usize = 50;
+/// The total number of values that can be stored in a OnceArray.
+const MAX_VALUES: usize = NODE_SIZE * NODE_COUNT;
 
 /// A grow-only array that can initialize indexes individually.
 ///
@@ -29,27 +32,35 @@ const NODE_COUNT: usize = 50;
 /// Growing beyond that will result in a panic when the slot is set.
 pub struct OnceArray<T> {
     nodes: [AtomicBox<OnceArrayNode<T>>; NODE_COUNT],
-    accum: AtomicUsize,
+    accum: AtomicU32,
 }
 
 impl<T> OnceArray<T> {
     pub fn new() -> Self {
         OnceArray {
             nodes: make_static_array::<_, NODE_COUNT>(&|| AtomicBox::empty()),
-            accum: AtomicUsize::new(0),
+            accum: 0.into(),
         }
     }
 
     /// Reserves an index to be set later. This index is guaranteed to be unique.
-    pub fn reserve(&self) -> u32 {
+    pub fn reserve(&self) -> Option<NonMaxU32> {
         // NOTE: We use a u32 because the maximum number of indices can fit within u32.
         // Also, we know outside code will use u32 more than usize.
-        self.accum.fetch_add(1, Ordering::SeqCst) as u32
+        let index = self.accum.fetch_add(1, Ordering::SeqCst) as u32;
+        if index < MAX_VALUES as u32 {
+            // SAFETY: MAX_VALUES is less than the maximum of a u32.
+            Some(unsafe { NonMaxU32::new_unchecked(index) })
+        } else {
+            // Subtract 1 to ensure that index accumulator never wraps.
+            self.accum.fetch_sub(1, Ordering::SeqCst);
+            None
+        }
     }
 
     /// Tries to get the value at a specific index. If that index has not been initialized,
     /// it will return None.
-    pub fn get(&self, index: u32) -> Option<&T> {
+    pub fn get(&self, index: NonMaxU32) -> Option<&T> {
         // OPTIMIZATION: Could we use Ordering::Acquire here?
         if let Some(node) = self.nodes[node_index(index)].load(Ordering::SeqCst) {
             return node.get(index);
@@ -61,7 +72,7 @@ impl<T> OnceArray<T> {
     /// Sets the value at the given index. This assumes the index has not been previously set.
     /// # Panics
     /// Panics if this index has already been set.
-    pub fn set(&self, index: u32, val: T) {
+    pub fn set(&self, index: NonMaxU32, val: T) {
         if !self.try_set(index, val) {
             panic!("Cannot set a value in a once-array that has already been initialized.");
         }
@@ -69,24 +80,24 @@ impl<T> OnceArray<T> {
 
     /// Tries to set the value at the given index. If that value has been already set,
     /// the value is discarded. Returns whether the value was set or not.
-    pub fn try_set(&self, index: u32, val: T) -> bool {
+    pub fn try_set(&self, index: NonMaxU32, val: T) -> bool {
         // OPTIMIZATION: Could we use Ordering::Acquire here?
-        if self.accum.load(Ordering::SeqCst) <= index as usize {
+        if self.accum.load(Ordering::SeqCst) <= index.get() {
             panic!("Cannot set a value in a non-reserved index.")
         }
-        return self.ensure_node_for_index(index).try_set(index, val);
+        self.ensure_node_for_index(index).try_set(index, val)
     }
 
     /// Adds a value onto the array and returns the index the value is at.
-    pub fn push(&self, val: T) -> u32 {
-        let index = self.reserve();
+    pub fn push(&self, val: T) -> NonMaxU32 {
+        let index = self.reserve().unwrap();
         self.set(index, val);
         index
     }
 
     /// Ensures that the node exists. It will then return either the existing node or
     /// the newly created node.
-    fn ensure_node_for_index(&self, index: u32) -> &OnceArrayNode<T> {
+    fn ensure_node_for_index(&self, index: NonMaxU32) -> &OnceArrayNode<T> {
         let node_slot = &self.nodes[node_index(index)];
         // OPTIMIZATION: Could we use Ordering::Acquire here?
         if let Some(node) = node_slot.load(Ordering::SeqCst) {
@@ -101,13 +112,13 @@ impl<T> OnceArray<T> {
         )
     }
 }
-impl<T> std::ops::Index<u32> for OnceArray<T> {
+impl<T> std::ops::Index<NonMaxU32> for OnceArray<T> {
     type Output = T;
 
     /// Gets the value at the given index.
     /// # Panics
     /// Panics if the index is out of bounds or if that index has not been set.
-    fn index(&self, index: u32) -> &T {
+    fn index(&self, index: NonMaxU32) -> &T {
         return self.get(index).unwrap();
     }
 }
@@ -122,12 +133,12 @@ struct OnceArrayNode<T> {
     values: [AtomicBox<T>; NODE_SIZE],
 }
 impl<T> OnceArrayNode<T> {
-    fn get(&self, index: u32) -> Option<&T> {
+    fn get(&self, index: NonMaxU32) -> Option<&T> {
         // OPTIMIZATION: Could we use Ordering::Acquire here?
         self.values[self.val_index(index)].load(Ordering::SeqCst)
     }
 
-    fn try_set(&self, index: u32, val: T) -> bool {
+    fn try_set(&self, index: NonMaxU32, val: T) -> bool {
         // OPTIMIZATION: Can different orderings work here?
         let new_val = self.values[self.val_index(index)].try_set_if_null(
             Box::new(val),
@@ -137,8 +148,8 @@ impl<T> OnceArrayNode<T> {
         return matches!(new_val, Ok(_));
     }
 
-    fn val_index(&self, index: u32) -> usize {
-        index as usize % NODE_SIZE
+    fn val_index(&self, index: NonMaxU32) -> usize {
+        index.get() as usize % NODE_SIZE
     }
 }
 impl<T> Default for OnceArrayNode<T> {
@@ -149,8 +160,8 @@ impl<T> Default for OnceArrayNode<T> {
     }
 }
 
-fn node_index(index: u32) -> usize {
-    index as usize / NODE_SIZE
+fn node_index(index: NonMaxU32) -> usize {
+    index.get() as usize / NODE_SIZE
 }
 
 #[cfg(test)]
@@ -160,15 +171,15 @@ mod tests {
     #[test]
     fn reserved_indexes_are_sequential() {
         let arr = OnceArray::<usize>::default();
-        assert_eq!(arr.reserve(), 0);
-        assert_eq!(arr.reserve(), 1);
-        assert_eq!(arr.reserve(), 2);
+        assert_eq!(arr.reserve().unwrap(), 0.into());
+        assert_eq!(arr.reserve().unwrap(), 1.into());
+        assert_eq!(arr.reserve().unwrap(), 2.into());
     }
 
     #[test]
     fn can_set_reserved_index() {
         let arr = OnceArray::<usize>::default();
-        let index = arr.reserve();
+        let index = arr.reserve().unwrap();
         assert!(arr.try_set(index, 10));
         assert_eq!(arr[index], 10);
     }
@@ -176,7 +187,7 @@ mod tests {
     #[test]
     fn try_set_returns_false_when_already_set() {
         let arr = OnceArray::<usize>::default();
-        let index = arr.reserve();
+        let index = arr.reserve().unwrap();
         arr.set(index, 10);
         assert!(!arr.try_set(index, 11));
     }
@@ -185,7 +196,7 @@ mod tests {
     #[should_panic]
     fn panic_on_double_set() {
         let arr = OnceArray::<usize>::default();
-        let index = arr.reserve();
+        let index = arr.reserve().unwrap();
         arr.set(index, 10);
         arr.set(index, 11);
     }
@@ -195,21 +206,21 @@ mod tests {
     fn cannot_set_arbitrary_index() {
         let arr = OnceArray::<usize>::default();
         // Size this array hasn't had any reservations, there isn't a 0-index.
-        arr.set(0, 10);
+        arr.set(0.into(), 10);
     }
 
     #[test]
     fn can_get_arbitrary_indexes() {
         let arr = OnceArray::<usize>::default();
         // Since this array hasn't had any reservations, there should be nothing in 0.
-        assert_eq!(arr.get(0), None);
+        assert_eq!(arr.get(0.into()), None);
     }
 
     #[test]
     fn can_get_valid_indexes() {
         let arr = OnceArray::<usize>::default();
         // We've reserved an index but not put anything in it. So there is nothing there.
-        let index = arr.reserve();
+        let index = arr.reserve().unwrap();
         assert_eq!(arr.get(index), None);
         // Now that the index has been set, there should be some value there.
         arr.set(index, 10);
@@ -220,7 +231,7 @@ mod tests {
     #[should_panic]
     fn index_panics_on_empty_index() {
         let arr = OnceArray::<usize>::default();
-        let index = arr.reserve();
+        let index = arr.reserve().unwrap();
         // Since the index hasn't been set, this should panic.
         let _ = arr[index];
     }

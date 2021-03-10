@@ -33,7 +33,7 @@ fn run_test(env: Arc<CompileEnv>, source: &str, expected: &[TokenKind], allow_in
         None
     };
     let mut lexer = Lexer::new(&env, callback);
-    let tokens = lexer.lex_bytes(0, source.as_bytes());
+    let tokens = lexer.lex_bytes(0.into(), source.as_bytes());
 
     for i in 0..expected.len() {
         assert_eq!(tokens[i].kind(), &expected[i], "Index: {}", i);
@@ -45,7 +45,7 @@ fn escape_new_line_adds_to_token_length() {
     let env = new_env();
     let callback = |_, _: &CachedString, _: &Option<Arc<Path>>| panic!("No includes should occur!");
     let mut lexer = Lexer::new(&env, callback);
-    let tokens = lexer.lex_bytes(0, "+\\\n=\\\n+=+=\\\n".as_bytes());
+    let tokens = lexer.lex_bytes(0.into(), "+\\\n=\\\n+=+=\\\n".as_bytes());
     // The escape-newline is included in the length of the token if it occurs in the center.
     assert_eq!(tokens[0].loc().byte_length, 4);
     // The escape-newline is not included in the length of the token if it is at the start or ending.

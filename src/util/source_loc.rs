@@ -2,6 +2,8 @@
 // This source code is licensed under GPLv3 or any later version.
 use std::convert::TryInto;
 
+use crate::math::NonMaxU32;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SourceLoc {
     file_id: FileId,
@@ -51,10 +53,10 @@ impl SourceLoc {
 }
 /// A type alias representing the numeric type that represents the id of a file.
 /// # Warning
-/// While this type is currently a u32, it may change in the future to another
+/// While this type is currently a NonMaxU32, it may change in the future to another
 /// numeric type or a structure type. However, this type should never be
 /// larger than 4 bytes.
-pub type FileId = u32;
+pub type FileId = NonMaxU32;
 
 #[cfg(test)]
 mod test {
@@ -64,29 +66,29 @@ mod test {
     fn range_matches_expected() {
         const START: usize = 23;
         const LENGTH: usize = 45;
-        let test_case = SourceLoc::new(0, START as u32, LENGTH as u16);
+        let test_case = SourceLoc::new(0.into(), START as u32, LENGTH as u16);
         assert_eq!(test_case.range().start, START);
         assert_eq!(test_case.range().len(), LENGTH);
     }
 
     #[test]
     fn through_matches_expected() {
-        let start = SourceLoc::new(0, 3, 4);
-        let end = SourceLoc::new(0, 20, 3);
-        assert_eq!(start.through(&end), Some(SourceLoc::new(0, 3, 20)));
+        let start = SourceLoc::new(0.into(), 3, 4);
+        let end = SourceLoc::new(0.into(), 20, 3);
+        assert_eq!(start.through(&end), Some(SourceLoc::new(0.into(), 3, 20)));
     }
 
     #[test]
     fn through_reversed_matches_expected() {
-        let start = SourceLoc::new(0, 20, 3);
-        let end = SourceLoc::new(0, 3, 4);
-        assert_eq!(start.through(&end), Some(SourceLoc::new(0, 3, 20)));
+        let start = SourceLoc::new(0.into(), 20, 3);
+        let end = SourceLoc::new(0.into(), 3, 4);
+        assert_eq!(start.through(&end), Some(SourceLoc::new(0.into(), 3, 20)));
     }
 
     #[test]
     fn through_returns_none_when_different_files() {
-        let start = SourceLoc::new(0, 0, 10);
-        let end = SourceLoc::new(1, 10, 10);
+        let start = SourceLoc::new(0.into(), 0, 10);
+        let end = SourceLoc::new(1.into(), 10, 10);
         assert!(start.through(&end).is_none());
     }
 }

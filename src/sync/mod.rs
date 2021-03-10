@@ -9,6 +9,7 @@ pub use std::sync::atomic::{
     AtomicBool,
     AtomicPtr,
     AtomicU8,
+    AtomicU32,
     AtomicUsize,
     Ordering,
 };

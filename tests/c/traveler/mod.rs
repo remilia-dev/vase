@@ -15,6 +15,7 @@ use vase::{
         TokenKind,
         Traveler,
     },
+    math::NonMaxU32,
     sync::Arc,
     util::CachedString,
 };
@@ -30,17 +31,20 @@ fn run_test(env: Arc<CompileEnv>, sources: &[&str], expected: &[TokenKind]) {
         );
     }
 
-    let callback = |_, _: &CachedString, _: &Option<Arc<Path>>| Some(1u32);
+    let callback = |_, _: &CachedString, _: &Option<Arc<Path>>| Some(1.into());
     let mut lexer = Lexer::new(&env, callback);
     for (i, source) in sources.iter().enumerate() {
-        let tokens = lexer.lex_bytes(i as u32, source.as_bytes());
+        let file_id = NonMaxU32::new(i as u32).unwrap();
+        let tokens = lexer.lex_bytes(file_id, source.as_bytes());
         env.file_id_to_tokens().push(Arc::new(tokens));
     }
 
     let mut traveler = Traveler::new(env.clone(), &|err| {
         panic!("An error should not have occured: {:?}", err);
     });
-    traveler.load_start(env.file_id_to_tokens()[0].clone()).unwrap();
+    traveler
+        .load_start(env.file_id_to_tokens()[0.into()].clone())
+        .unwrap();
 
     for expected_token in expected.iter() {
         assert_eq!(traveler.head().kind(), expected_token);

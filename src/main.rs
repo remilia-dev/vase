@@ -20,7 +20,7 @@ fn main() {
         errors.push(err);
         false
     });
-    let tokens = env.file_id_to_tokens()[0].clone();
+    let tokens = env.file_id_to_tokens()[0.into()].clone();
     println!("{:#?}", tokens);
     traveler.load_start(tokens).unwrap();
 

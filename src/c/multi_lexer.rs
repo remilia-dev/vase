@@ -39,11 +39,10 @@ impl MultiLexer {
 
     pub fn lex_multi_threaded(&mut self, files: &[Arc<Path>]) {
         let mut work_queue = WorkQueue::<(Arc<Path>, FileId)>::new(self.env.threads());
-        work_queue.add_tasks_mut(
-            files
-                .iter()
-                .map(|file| (file.clone(), self.env.file_id_to_tokens().reserve())),
-        );
+        work_queue.add_tasks_mut(files.iter().map(|file| {
+            let file_id = self.env.file_id_to_tokens().reserve();
+            (file.clone(), file_id.expect("Ran out of file ids."))
+        }));
 
         let include_callback =
             |inc_type, filename: &CachedString, curr_file: &Option<Arc<Path>>| -> Option<FileId> {
@@ -81,7 +80,7 @@ impl MultiLexer {
                     return (None, Some(*file_id));
                 }
 
-                let new_file_id = self.env.file_id_to_tokens().reserve();
+                let new_file_id = self.env.file_id_to_tokens().reserve().unwrap();
                 let mut path_to_file_id = RwLockUpgradableReadGuard::upgrade(path_to_file_id);
                 path_to_file_id.insert(inc_file.clone(), new_file_id);
                 // Err signals that the outer function will need to have the file lex.
