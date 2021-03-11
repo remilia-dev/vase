@@ -6,52 +6,14 @@ use std::{
 };
 
 use crate::{
-    sync::Arc,
-    util::{
-        CachedString,
-        FileId,
-        SourceLoc,
+    c::{
+        IncludeType,
+        Keyword,
+        StringEncoding,
     },
+    sync::Arc,
+    util::CachedString,
 };
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Token {
-    loc: SourceLoc,
-    whitespace_before: bool,
-    kind: TokenKind,
-}
-impl Token {
-    pub fn new(loc: SourceLoc, whitespace_before: bool, kind: TokenKind) -> Token {
-        Token { loc, whitespace_before, kind }
-    }
-
-    pub fn new_first_byte(file_id: FileId, kind: TokenKind) -> Token {
-        Token {
-            loc: SourceLoc::new_first_byte(file_id),
-            whitespace_before: false,
-            kind,
-        }
-    }
-
-    pub fn loc(&self) -> SourceLoc {
-        self.loc
-    }
-    pub fn whitespace_before(&self) -> bool {
-        self.whitespace_before
-    }
-    pub fn kind(&self) -> &TokenKind {
-        &self.kind
-    }
-    pub fn kind_mut(&mut self) -> &mut TokenKind {
-        &mut self.kind
-    }
-}
-
-impl fmt::Display for Token {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.kind.fmt(f)
-    }
-}
 
 #[repr(u8)]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -234,6 +196,7 @@ pub enum TokenKind {
     Tilde,
     // == End Symbols
 }
+
 impl TokenKind {
     pub fn is_linking(&self) -> bool {
         use TokenKind::*;
@@ -403,6 +366,7 @@ impl TokenKind {
         crate::c::ast::BinaryOp::try_from(self).is_ok()
     }
 }
+
 impl fmt::Display for TokenKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use TokenKind::*;
@@ -426,189 +390,5 @@ impl fmt::Display for TokenKind {
             LexerError(..) | Eof | PreEnd => Ok(()),
             _ => write!(f, "{}", self.text()),
         }
-    }
-}
-
-#[repr(u8)]
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum Keyword {
-    Auto,
-    Break,
-    Case,
-    Char,
-    Const,
-    Continue,
-    Default,
-    Do,
-    Double,
-    Else,
-    Enum,
-    Extern,
-    Float,
-    For,
-    Goto,
-    If,
-    Inline,
-    Int,
-    Long,
-    Register,
-    Restrict,
-    Return,
-    Short,
-    Signed,
-    Sizeof,
-    Static,
-    Struct,
-    Switch,
-    Typedef,
-    Union,
-    Unsigned,
-    Void,
-    Volatile,
-    While,
-    Alignas,
-    Alignof,
-    Atomic,
-    Bool,
-    Complex,
-    Decimal32,
-    Decimal64,
-    Decimal128,
-    Generic,
-    Imaginary,
-    Noreturn,
-    Pragma,
-    StaticAssert,
-    ThreadLocal,
-}
-impl Keyword {
-    pub fn text(self) -> &'static str {
-        use Keyword::*;
-        match self {
-            Auto => "auto",
-            Break => "break",
-            Case => "case",
-            Char => "char",
-            Const => "const",
-            Continue => "continue",
-            Default => "default",
-            Do => "do",
-            Double => "double",
-            Else => "else",
-            Enum => "enum",
-            Extern => "extern",
-            Float => "float",
-            For => "for",
-            Goto => "goto",
-            If => "if",
-            Inline => "inline",
-            Int => "int",
-            Long => "long",
-            Register => "register",
-            Restrict => "restrict",
-            Return => "return",
-            Short => "short",
-            Signed => "signed",
-            Sizeof => "sizeof",
-            Static => "static",
-            Struct => "struct",
-            Switch => "switch",
-            Typedef => "typedef",
-            Union => "union",
-            Unsigned => "unsigned",
-            Void => "void",
-            Volatile => "volatile",
-            While => "while",
-            Alignas => "_Alignas",
-            Alignof => "_Alignof",
-            Atomic => "_Atomic",
-            Bool => "_Bool",
-            Complex => "_Complex",
-            Decimal32 => "_Decimal32",
-            Decimal64 => "_Decimal64",
-            Decimal128 => "_Decimal128",
-            Generic => "_Generic",
-            Imaginary => "_Imaginary",
-            Noreturn => "_Noreturn",
-            Pragma => "_Pragma",
-            StaticAssert => "_Static_assert",
-            ThreadLocal => "_Thread_local",
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[repr(u8)]
-pub enum IncludeType {
-    IncludeSystem, // For #include <file>
-    IncludeLocal,  // For #include "file"
-    IncludeNext,   // For #include_next "file"
-}
-
-impl IncludeType {
-    pub fn is_end_char(self, c: char) -> bool {
-        match c {
-            '"' => self == IncludeType::IncludeLocal,
-            '>' => self == IncludeType::IncludeSystem,
-            _ => false,
-        }
-    }
-
-    pub fn check_relative(self) -> bool {
-        return matches!(self, IncludeType::IncludeLocal | IncludeType::IncludeNext);
-    }
-
-    pub fn ignore_own_file(self) -> bool {
-        return matches!(self, IncludeType::IncludeNext);
-    }
-}
-
-impl fmt::Display for IncludeType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            Self::IncludeSystem => write!(f, "system include"),
-            Self::IncludeLocal => write!(f, "local/relative include"),
-            Self::IncludeNext => write!(f, "#include_next include"),
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[repr(u8)]
-pub enum StringEncoding {
-    Default,
-    U8,
-    WChar16,
-    WChar32,
-    U16,
-    U32,
-}
-impl StringEncoding {
-    pub fn prefix(self) -> Option<&'static str> {
-        match self {
-            Self::Default => None,
-            Self::U8 => Some("u8"),
-            Self::WChar16 => Some("L"),
-            Self::WChar32 => Some("L"),
-            Self::U16 => Some("u"),
-            Self::U32 => Some("U"),
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn ensure_token_is_at_most_32_bytes() {
-        // Testing limits the size of CToken since even small size increases will result in
-        // higher memory usage (and not by a tiny amount).
-        let size = std::mem::size_of::<Token>();
-        assert!(
-            size <= 32,
-            "CToken is {} bytes when it should be 32 or less.",
-            size
-        );
     }
 }
