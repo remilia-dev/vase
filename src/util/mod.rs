@@ -21,6 +21,7 @@ pub use vase_macros::{
     enum_with_properties,
     variant_list,
 };
+pub use vec32::Vec32;
 /// Memory utilities.
 pub mod mem;
 
@@ -29,3 +30,4 @@ mod ptr_equality;
 mod source_loc;
 mod string_builder;
 mod string_cache;
+mod vec32;
