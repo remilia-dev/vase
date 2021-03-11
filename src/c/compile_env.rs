@@ -16,7 +16,6 @@ use crate::{
         FileTokens,
         IncludeType,
         Keyword,
-        LangVersion,
         StringEncoding,
         TokenKind,
     },
@@ -123,67 +122,21 @@ impl CompileEnv {
 }
 
 fn update_cache_maps(env: &mut CompileEnv) {
-    let version = env.settings.version;
+    for &keyword in &Keyword::VARIANTS {
+        if keyword.should_add(&env.settings) {
+            let cached = env.cache.get_or_cache(keyword.text());
+            env.cached_to_keywords.insert(cached, keyword);
+        }
+    }
 
-    {
-        use Keyword::*;
-        let mut map_keyword = |s: &str, kind: Keyword| {
-            let cached = env.cache.get_or_cache(s);
-            env.cached_to_keywords.insert(cached, kind);
-        };
-        map_keyword("auto", Auto);
-        map_keyword("break", Break);
-        map_keyword("case", Case);
-        map_keyword("char", Char);
-        map_keyword("const", Const);
-        map_keyword("continue", Continue);
-        map_keyword("default", Default);
-        map_keyword("do", Do);
-        map_keyword("double", Double);
-        map_keyword("else", Else);
-        map_keyword("enum", Enum);
-        map_keyword("extern", Extern);
-        map_keyword("float", Float);
-        map_keyword("for", For);
-        map_keyword("goto", Goto);
-        map_keyword("if", If);
-        map_keyword("int", Int);
-        map_keyword("long", Long);
-        map_keyword("register", Register);
-        map_keyword("return", Return);
-        map_keyword("short", Short);
-        map_keyword("signed", Signed);
-        map_keyword("sizeof", Sizeof);
-        map_keyword("static", Static);
-        map_keyword("struct", Struct);
-        map_keyword("switch", Switch);
-        map_keyword("typedef", Typedef);
-        map_keyword("union", Union);
-        map_keyword("unsigned", Unsigned);
-        map_keyword("void", Void);
-        map_keyword("volatile", Volatile);
-        map_keyword("while", While);
-        if version >= LangVersion::C99 {
-            map_keyword("inline", Inline);
-            map_keyword("restrict", Restrict);
-            map_keyword("_Bool", Bool);
-            map_keyword("_Complex", Complex);
-            map_keyword("_Imaginary", Imaginary);
-            map_keyword("_Pragma", Pragma);
+    for &encoding in &StringEncoding::VARIANTS {
+        if !encoding.should_add(&env.settings) {
+            continue;
         }
-        if version >= LangVersion::C11 {
-            map_keyword("_Alignas", Alignas);
-            map_keyword("_Alignof", Alignof);
-            map_keyword("_Atomic", Atomic);
-            map_keyword("_Generic", Generic);
-            map_keyword("_Noreturn", Noreturn);
-            map_keyword("_Static_assert", StaticAssert);
-            map_keyword("_Thread_local", ThreadLocal);
-        }
-        if version >= LangVersion::C23 {
-            map_keyword("_Decimal32", Decimal32);
-            map_keyword("_Decimal64", Decimal64);
-            map_keyword("_Decimal128", Decimal128);
+
+        if let Some(prefix) = encoding.prefix() {
+            let cached = env.cache.get_or_cache(prefix);
+            env.cached_to_str_prefix.insert(cached, encoding);
         }
     }
 
@@ -207,19 +160,5 @@ fn update_cache_maps(env: &mut CompileEnv) {
         map_preprocessor("include", PreInclude);
         map_preprocessor("include_next", PreIncludeNext);
         map_preprocessor("warning", PreWarning);
-    }
-
-    let wchar_is_16_bytes = env.settings.wchar_is_16_bytes;
-    let mut map_str_prefix = |s: &str, str: StringEncoding| {
-        let cached = env.cache.get_or_cache(s);
-        env.cached_to_str_prefix.insert(cached, str);
-    };
-    map_str_prefix("u8", StringEncoding::U8);
-    map_str_prefix("u", StringEncoding::U16);
-    map_str_prefix("U", StringEncoding::U32);
-    if wchar_is_16_bytes {
-        map_str_prefix("L", StringEncoding::WChar16);
-    } else {
-        map_str_prefix("L", StringEncoding::WChar32);
     }
 }

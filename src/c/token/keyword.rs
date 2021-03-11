@@ -1,5 +1,14 @@
 // Copyright 2021. remilia-dev
 // This source code is licensed under GPLv3 or any later version.
+use crate::{
+    c::{
+        CompileSettings,
+        LangVersion,
+    },
+    util::variant_list,
+};
+
+#[variant_list]
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Keyword {
@@ -105,6 +114,13 @@ impl Keyword {
             Pragma => "_Pragma",
             StaticAssert => "_Static_assert",
             ThreadLocal => "_Thread_local",
+        }
+    }
+
+    pub fn should_add(self, settings: &CompileSettings) -> bool {
+        match self {
+            Self::Inline | Self::Restrict => settings.version >= LangVersion::C99,
+            _ => true,
         }
     }
 }

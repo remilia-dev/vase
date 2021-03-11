@@ -1,7 +1,13 @@
 // Copyright 2021. remilia-dev
 // This source code is licensed under GPLv3 or any later version.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+use crate::{
+    c::CompileSettings,
+    util::variant_list,
+};
+
+#[variant_list]
 #[repr(u8)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StringEncoding {
     Default,
     U8,
@@ -20,6 +26,14 @@ impl StringEncoding {
             Self::WChar32 => Some("L"),
             Self::U16 => Some("u"),
             Self::U32 => Some("U"),
+        }
+    }
+
+    pub fn should_add(self, settings: &CompileSettings) -> bool {
+        match self {
+            Self::WChar16 => settings.wchar_is_16_bytes,
+            Self::WChar32 => !settings.wchar_is_16_bytes,
+            _ => true,
         }
     }
 }
