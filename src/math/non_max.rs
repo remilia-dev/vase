@@ -44,3 +44,33 @@ impl From<u16> for NonMaxU32 {
         unsafe { NonMaxU32::new_unchecked(v as u32) }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn option_size_is_same() {
+        use std::mem::size_of;
+        assert_eq!(size_of::<Option<NonMaxU32>>(), size_of::<NonMaxU32>());
+    }
+
+    #[test]
+    fn new_returns_non_on_u32_max() {
+        assert!(NonMaxU32::new(u32::MAX).is_none());
+    }
+
+    #[test]
+    fn new_creates_correct_value() {
+        const TEST_CASE: u32 = 100;
+        let value = NonMaxU32::new(TEST_CASE).unwrap();
+        assert_eq!(value.get(), TEST_CASE);
+    }
+
+    #[test]
+    fn can_into_a_u16() {
+        const TEST_CASE: u16 = 100;
+        let value: NonMaxU32 = TEST_CASE.into();
+        assert_eq!(value, NonMaxU32::new(TEST_CASE as u32).unwrap());
+    }
+}
