@@ -28,7 +28,7 @@ pub fn variant_list(enum_: ItemEnum) -> TokenStream {
         #enum_
 
         impl #enum_name {
-            const VARIANTS: [Self; #variant_count] = [#(#variants,)*];
+            pub const VARIANTS: [Self; #variant_count] = [#(#variants,)*];
         }
     })
     .into()
