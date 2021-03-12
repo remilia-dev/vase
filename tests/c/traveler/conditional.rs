@@ -85,3 +85,51 @@ fn preprocessor_else_works() {
         ],
     );
 }
+
+#[test]
+fn preprocessor_if_conditions_work() {
+    let env = new_env();
+    let cache = env.cache();
+    run_test(
+        env.clone(),
+        &[r#"
+        #if 0
+            IsFalse
+        #endif
+
+        #if 1
+            IsTrue
+        #endif
+
+        #if 7 == 1 + 2 * 3
+            PrecedenceWorks
+        #endif
+
+        #if 1 ? 0 : 1
+            TernaryIsBackwards
+        #elif 1 ? 1 : 0
+            TernaryWorks
+        #endif
+
+        #define EMPTY
+        #if 0 + EMPTY 1
+            ReplacementOccurs
+        #endif
+
+        #if (1 - 1)
+            #error Should never occur
+        #endif
+
+        #if UNDEFINED == 0
+            UndefinedReplacedWith0
+        #endif
+        "#],
+        &[
+            Identifier(cache.get_or_cache("IsTrue")),
+            Identifier(cache.get_or_cache("PrecedenceWorks")),
+            Identifier(cache.get_or_cache("TernaryWorks")),
+            Identifier(cache.get_or_cache("ReplacementOccurs")),
+            Identifier(cache.get_or_cache("UndefinedReplacedWith0")),
+        ],
+    );
+}
