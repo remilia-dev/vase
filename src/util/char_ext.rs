@@ -17,30 +17,31 @@ pub trait CharExt: private::Sealed {
     /// Should decoding fail, an error describing the problem will be returned.
     fn decode_utf8(bytes: &[u8], offset: usize) -> Result<DecodedChar, Utf8DecodeError> {
         let first_byte = bytes[offset];
-        let byte_count = first_byte.leading_ones() as usize;
 
-        match byte_count {
-            0 => {
-                // SAFETY: Bytes with no leading 1s are ASCII characters.
+        let byte_count = match first_byte {
+            0..=127 => {
+                // SAFETY: Bytes with values 0 to 127 are ASCII characters.
                 let char = unsafe { std::char::from_u32_unchecked(first_byte as u32) };
 
                 return Ok(DecodedChar { char, byte_count: 1 });
             },
-            1 => return Err(Utf8DecodeError::MisalignedRead { byte_position: offset }),
-            2..=4 => {
-                if offset + byte_count > bytes.len() {
-                    return Err(Utf8DecodeError::MissingBytes {
-                        byte_position: offset,
-                        missing_byte_count: offset + byte_count - bytes.len(),
-                    });
-                }
-            },
-            _ => {
+            128..=191 => return Err(Utf8DecodeError::MisalignedRead { byte_position: offset }),
+            192..=223 => 2,
+            224..=239 => 3,
+            240..=247 => 4,
+            248..=255 => {
                 return Err(Utf8DecodeError::InvalidByte {
                     byte_position: offset,
                     bad_byte: first_byte,
                 });
             },
+        };
+
+        if offset + byte_count > bytes.len() {
+            return Err(Utf8DecodeError::MissingBytes {
+                byte_position: offset,
+                missing_byte_count: offset + byte_count - bytes.len(),
+            });
         }
 
         let raw_char: u32;
