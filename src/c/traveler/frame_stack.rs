@@ -41,6 +41,8 @@ pub(super) struct FrameStack {
     file_refs: HashMap<FileId, Arc<FileTokens>>,
     /// A vec-deque of frames. The frame that is currently being worked on will always be at index 0.
     frames: VecDeque<Frame>,
+    /// A list of all the files that have been read so far during travel.
+    dependencies: Vec<FileId>,
     /// A map from a macro's unique id to the kind of macro it is.
     ///
     /// A macro's unique id is the uniq_id() of its identifier.
@@ -50,6 +52,11 @@ pub(super) struct FrameStack {
     /// This is set to true every time the stack is moved. The only way it is false
     /// is if skip_to is used.
     should_chain_skip: bool,
+    /// If we were to restart, how many calls of [Traveler.move_forward] would
+    /// be needed to get to where we are.
+    ///
+    /// This value is stored in the frame stack since it is saved.
+    pub(super) index: u32,
 }
 
 impl FrameStack {
@@ -60,8 +67,10 @@ impl FrameStack {
             env,
             file_refs: HashMap::default(),
             frames: VecDeque::default(),
+            dependencies: Vec::new(),
             macros: HashMap::default(),
             should_chain_skip: true,
+            index: 0,
         }
     }
     /// Sets up the frame stack up to start processing the given token stack.
@@ -70,7 +79,9 @@ impl FrameStack {
     pub fn load_start(&mut self, tokens: Arc<FileTokens>) {
         self.frames.clear();
         self.macros.clear();
+        self.dependencies.clear();
         self.should_chain_skip = true;
+        self.index = 0;
 
         self.frames.push_front(Frame::File {
             file_id: tokens.file_id(),
@@ -92,7 +103,9 @@ impl FrameStack {
         TravelerState {
             frames: self.frames.clone(),
             macros: self.macros.clone(),
+            dependencies: self.dependencies.clone(),
             should_chain_skip: self.should_chain_skip,
+            index: self.index,
         }
     }
     /// Loads the given saved state.
@@ -103,7 +116,9 @@ impl FrameStack {
     pub fn load_state(&mut self, state: TravelerState) {
         self.frames = state.frames;
         self.macros = state.macros;
+        self.dependencies = state.dependencies;
         self.should_chain_skip = state.should_chain_skip;
+        self.index = state.index;
     }
     /// Returns a reference to the current token the frame stack is at.
     pub fn head(&self) -> &Token {
@@ -255,6 +270,7 @@ impl FrameStack {
     ///
     /// This will return Err only if no token stack by that file id could be loaded.
     pub fn push_include(&mut self, file_id: FileId) -> Result<(), ()> {
+        self.dependencies.push(file_id);
         let (file_id, length) = match self.file_refs.get(&file_id) {
             Some(file) => (file_id, file.len()),
             None => match self.env.file_id_to_tokens().get(file_id) {
@@ -492,8 +508,8 @@ impl FrameStack {
                             } else if self.is_token_joiner_next() {
                                 self.move_forward();
                             }
-                        self.handle_macro(handle, on_error)?;
-                        continue;
+                            self.handle_macro(handle, on_error)?;
+                            continue;
                         },
                         Some(handle) => {
                             self.handle_macro(handle, on_error)?;
@@ -521,11 +537,11 @@ impl FrameStack {
         if tokens.is_empty() {
             self.move_forward();
         } else {
-        self.frames.push_front(Frame::FuncMacro {
-            macro_id,
-            index: 0,
-            tokens: Arc::new(tokens),
-        });
+            self.frames.push_front(Frame::FuncMacro {
+                macro_id,
+                index: 0,
+                tokens: Arc::new(tokens),
+            });
         }
         Ok(())
     }

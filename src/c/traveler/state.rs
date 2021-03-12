@@ -5,9 +5,12 @@ use std::collections::{
     VecDeque,
 };
 
-use crate::c::traveler::{
-    Frame,
-    MacroKind,
+use crate::{
+    c::traveler::{
+        Frame,
+        MacroKind,
+    },
+    util::FileId,
 };
 
 /// A snapshot of [Traveler](super::Traveler)'s progress in a token stack.
@@ -19,5 +22,7 @@ use crate::c::traveler::{
 pub struct TravelerState {
     pub(super) frames: VecDeque<Frame>,
     pub(super) macros: HashMap<usize, MacroKind>,
+    pub(super) dependencies: Vec<FileId>,
+    pub(super) index: u32,
     pub(super) should_chain_skip: bool,
 }

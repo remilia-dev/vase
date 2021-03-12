@@ -27,3 +27,9 @@ mod if_parser;
 mod implementation;
 mod macro_kind;
 mod state;
+
+pub type TravelIndex = crate::math::NonMaxU32;
+pub struct TravelRange {
+    pub start: TravelIndex,
+    pub end: TravelIndex,
+}

@@ -8,6 +8,7 @@ use crate::{
             IfParser,
             MacroKind,
             TravelerError,
+            TravelIndex,
             TravelerState,
         },
         CompileEnv,
@@ -70,11 +71,16 @@ where OnError: FnMut(TravelerError) -> bool
         self.frames.load_state(state);
     }
 
+    pub fn index(&self) -> TravelIndex {
+        TravelIndex::new(self.frames.index).unwrap()
+    }
+
     pub fn head(&self) -> &Token {
         self.frames.head()
     }
 
     pub fn move_forward(&mut self) -> MayUnwind<&Token> {
+        self.frames.index += 1;
         self.frames.move_forward();
         loop {
             if self.frames.is_token_joiner_next() {
