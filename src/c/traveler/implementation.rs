@@ -193,7 +193,7 @@ where OnError: FnMut(TravelerError) -> bool
             Err(Unwind::Fatal) => return Err(Unwind::Fatal),
         };
         // Move past the PreEnd token.
-        self.move_forward()?;
+        self.frames.move_forward();
         match IfEvaluator::calc(&mut expr, if_token, |err| self.report_error(err)) {
             Ok(true) => Ok(()),
             Ok(false) | Err(Unwind::Block) => {

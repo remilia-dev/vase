@@ -197,6 +197,16 @@ where OnError: FnMut(TravelerError) -> bool
                 self.move_forward()?;
                 return Ok(Box::new(Literal { loc, kind: 0i64.into() }.into()));
             },
+            PreEnd => {
+                let loc = head.loc();
+                let error = Error::IfDefinedNotDefinable(
+                    self.if_token.clone(),
+                    has_parens,
+                    self.clone_head(),
+                );
+                self.report_error(error)?;
+                return Ok(Box::new(Literal { loc, kind: 0i64.into() }.into()));
+            },
             _ => {
                 let error = Error::IfDefinedNotDefinable(
                     self.if_token.clone(),
@@ -228,10 +238,10 @@ where OnError: FnMut(TravelerError) -> bool
         self.move_forward()?;
         let expr = self.parse_expression()?;
 
-        let maybe_rparen = self.move_forward()?;
-        let rparen_loc = match *maybe_rparen.kind() {
+        let head = self.head();
+        let rparen_loc = match *head.kind() {
             RParen => {
-                let loc = maybe_rparen.loc();
+                let loc = head.loc();
                 self.move_forward()?;
                 Some(loc)
             },
@@ -274,6 +284,7 @@ where OnError: FnMut(TravelerError) -> bool
         let kind = LiteralKind::from_character(chars, enc, |err: LiteralError| {
             self.report_error(err.into())
         })?;
+        self.move_forward()?;
         Ok(Box::new(Literal { loc, kind }.into()))
     }
 
