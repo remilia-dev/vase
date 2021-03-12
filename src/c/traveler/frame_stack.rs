@@ -227,7 +227,8 @@ impl FrameStack {
             ref frame => frame,
         };
         match *frame {
-            Frame::ObjectMacro { file_id, index, end, .. } => {
+            Frame::ObjectMacro { file_id, index, end, .. }
+            | Frame::TokenCollector { file_id, index, end, .. } => {
                 // We want to exclude searching for a token joiner at the end of the macro.
                 if index + 1 < end - 1 {
                     let next_token = self.file_refs[&file_id][index + 1].kind();
@@ -238,7 +239,9 @@ impl FrameStack {
             },
             Frame::FuncMacro { index, ref tokens, .. } => {
                 // We want to exclude searching for a token joiner at the end of the macro.
-                if index + 1 < tokens.len() - 1 {
+                if tokens.is_empty() {
+                    false
+                } else if index + 1 < tokens.len() - 1 {
                     let next_token = tokens[index + 1].kind();
                     matches!(*next_token, HashHash { .. })
                 } else {
@@ -481,11 +484,22 @@ impl FrameStack {
                 },
                 ref def if def.is_definable() && self.frames.len() == function_frame => {
                     let param_id = def.get_definable_id();
-                    if let Some(handle) = self.frames[0].has_parameter(param_id) {
+                    match self.frames[0].has_parameter(param_id) {
+                        Some(handle) if handle.is_empty() => {
+                            let last_kind = tokens.last().map(|token| token.kind());
+                            if let Some(&HashHash { .. }) = last_kind {
+                                tokens.pop();
+                            } else if self.is_token_joiner_next() {
+                                self.move_forward();
+                            }
                         self.handle_macro(handle, on_error)?;
                         continue;
-                    } else {
-                        tokens.push(head.clone());
+                        },
+                        Some(handle) => {
+                            self.handle_macro(handle, on_error)?;
+                            continue;
+                        },
+                        None => tokens.push(head.clone()),
                     }
                 },
                 ref def if def.is_definable() => {
@@ -504,11 +518,15 @@ impl FrameStack {
         }
 
         self.frames.pop_front();
+        if tokens.is_empty() {
+            self.move_forward();
+        } else {
         self.frames.push_front(Frame::FuncMacro {
             macro_id,
             index: 0,
             tokens: Arc::new(tokens),
         });
+        }
         Ok(())
     }
 

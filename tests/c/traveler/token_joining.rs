@@ -196,3 +196,27 @@ fn can_join_identifiers() {
         ],
     );
 }
+
+#[test]
+fn can_join_empty_func_macro() {
+    let env = new_env();
+    let cache = env.cache();
+    run_test(
+        env.clone(),
+        &[r#"
+        #define JOIN(A, B) A ## B
+        JOIN(, EmptyBefore)
+        JOIN(EmptyAfter,)
+        JOIN(,)
+
+        #define JOIN3(A, B, C) A ## B ## C
+        JOIN3(Empty,,Middle)
+        JOIN3(,,)
+        "#],
+        &[
+            Identifier(cache.get_or_cache("EmptyBefore")),
+            Identifier(cache.get_or_cache("EmptyAfter")),
+            Identifier(cache.get_or_cache("EmptyMiddle")),
+        ],
+    );
+}

@@ -60,3 +60,9 @@ pub(super) enum MacroHandle {
     /// This is handled separately since it requires reading the parameter tokens.
     FuncMacro { macro_id: usize, param_count: usize },
 }
+
+impl MacroHandle {
+    pub(super) fn is_empty(&self) -> bool {
+        matches!(*self, MacroHandle::Empty)
+    }
+}
