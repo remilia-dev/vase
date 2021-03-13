@@ -20,6 +20,7 @@ use crate::{
         StringEnc,
         Token,
         TokenKind::*,
+        TravelIndex,
         Traveler,
         TravelerError,
     },
@@ -61,17 +62,17 @@ where OnError: FnMut(TravelerError) -> bool
             let head = self.head();
             expression = match *head.kind() {
                 ref op if op.is_binary_op() => {
-                    let op_loc = head.loc();
+                    let op_index = self.traveler.index();
                     let op: BinaryOp = op.try_into().unwrap();
                     self.move_forward()?;
                     let rhs = self.parse_atom()?;
                     expression.add_op(op.precedence(), |lhs| {
-                        Expr::Binary(BinaryExpr { lhs, op, op_loc, rhs }).into()
+                        Expr::Binary(BinaryExpr { lhs, op, op_index, rhs }).into()
                     })
                 },
                 QMark => {
-                    let qmark_loc = head.loc();
-                    self.parse_ternary(expression, qmark_loc)?
+                    let qmark_index = self.traveler.index();
+                    self.parse_ternary(expression, qmark_index)?
                 },
                 Comma => {
                     self.report_error(Error::CommaInIfCondition)?;
@@ -93,15 +94,15 @@ where OnError: FnMut(TravelerError) -> bool
     fn parse_ternary(
         &mut self,
         expression: Box<Expr>,
-        qmark_loc: SourceLoc,
+        qmark_index: TravelIndex,
     ) -> MayUnwind<Box<Expr>> {
         // Move past the ?
         self.move_forward()?;
         let if_true = self.parse_expression()?;
 
         let maybe_colon = self.head();
-        let colon_loc = if matches!(*maybe_colon.kind(), Colon) {
-            maybe_colon.loc()
+        let colon_index = if matches!(*maybe_colon.kind(), Colon) {
+            self.traveler.index()
         } else {
             let error = Error::IfTernaryExpectedColon(self.if_token.clone(), self.clone_head());
             self.report_error(error)?;
@@ -115,9 +116,9 @@ where OnError: FnMut(TravelerError) -> bool
         Ok(expression.add_op(Precedence::Ternary, |condition| {
             Expr::Ternary(TernaryExpr {
                 condition,
-                qmark_loc,
+                qmark_index,
                 if_true,
-                colon_loc,
+                colon_index,
                 if_false,
             })
             .into()
@@ -145,14 +146,15 @@ where OnError: FnMut(TravelerError) -> bool
             },
             Plus | Minus | Tilde | Bang => {
                 let op: PrefixOp = head.kind().try_into().unwrap();
-                let op_loc = head.loc();
+                let op_index = self.traveler.index();
                 self.move_forward()?;
                 let expr = self.parse_atom()?;
-                Ok(Box::new(PrefixExpr { op, op_loc, expr }.into()))
+                let range = op_index..self.traveler.index();
+                Ok(Box::new(PrefixExpr { range, op, expr }.into()))
             },
             LParen { .. } => {
-                let lparen_loc = Some(head.loc());
-                self.parse_parens(lparen_loc)
+                let lparen_index = self.traveler.index();
+                self.parse_parens(lparen_index)
             },
             String {
                 is_char: true,
@@ -234,25 +236,23 @@ where OnError: FnMut(TravelerError) -> bool
         Ok(Box::new(Literal { loc, kind: value.into() }.into()))
     }
 
-    fn parse_parens(&mut self, lparen_loc: Option<SourceLoc>) -> MayUnwind<Box<Expr>> {
+    fn parse_parens(&mut self, lparen_index: TravelIndex) -> MayUnwind<Box<Expr>> {
         self.move_forward()?;
         let expr = self.parse_expression()?;
 
         let head = self.head();
-        let rparen_loc = match *head.kind() {
+        match *head.kind() {
             RParen => {
-                let loc = head.loc();
                 self.move_forward()?;
-                Some(loc)
             },
             _ => {
                 let error = Error::IfExpectedRParen(self.if_token.clone(), self.clone_head());
                 self.report_error(error)?;
-                None
             },
         };
+        let range = lparen_index..self.traveler.index();
         Ok(Box::new(
-            ParenExpr { lparen_loc, expr, rparen_loc }.into(),
+            ParenExpr { range, expr }.into(),
         ))
     }
 

@@ -29,7 +29,4 @@ mod macro_kind;
 mod state;
 
 pub type TravelIndex = crate::math::NonMaxU32;
-pub struct TravelRange {
-    pub start: TravelIndex,
-    pub end: TravelIndex,
-}
+pub type TravelRange = std::ops::Range<TravelIndex>;

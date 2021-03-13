@@ -1,17 +1,18 @@
 // Copyright 2021. remilia-dev
 // This source code is licensed under GPLv3 or any later version.
 use crate::{
-    c::ast::{
+    c::{
+        ast::{
         Associativity,
         BinaryOp,
         Literal,
         Precedence,
         PrefixOp,
     },
-    util::{
-        create_intos,
-        SourceLoc,
+        TravelIndex,
+        TravelRange,
     },
+    util::create_intos,
 };
 
 #[create_intos]
@@ -76,15 +77,20 @@ impl Expr {
 
 #[derive(Clone, Debug)]
 pub struct ParenExpr {
-    pub lparen_loc: Option<SourceLoc>,
+    /// The range of traveler indexes this expression covers.
+    ///
+    /// If parsed without error, the start index should be a ( token
+    /// and the end index should be a ) token.
+    pub range: TravelRange,
     pub expr: Box<Expr>,
-    pub rparen_loc: Option<SourceLoc>,
 }
 
 #[derive(Clone, Debug)]
 pub struct PrefixExpr {
+    /// The range of traveler indexes this expression covers.
+    /// The start index should be the operator token.
+    pub range: TravelRange,
     pub op: PrefixOp,
-    pub op_loc: SourceLoc,
     pub expr: Box<Expr>,
 }
 
@@ -92,16 +98,16 @@ pub struct PrefixExpr {
 pub struct BinaryExpr {
     pub lhs: Box<Expr>,
     pub op: BinaryOp,
-    pub op_loc: SourceLoc,
+    pub op_index: TravelIndex,
     pub rhs: Box<Expr>,
 }
 
 #[derive(Clone, Debug)]
 pub struct TernaryExpr {
     pub condition: Box<Expr>,
-    pub qmark_loc: SourceLoc,
+    pub qmark_index: TravelIndex,
     pub if_true: Box<Expr>,
-    pub colon_loc: SourceLoc,
+    pub colon_index: TravelIndex,
     pub if_false: Box<Expr>,
 }
 
@@ -109,6 +115,6 @@ pub struct TernaryExpr {
 pub struct AssignmentExpr {
     pub to: Box<Expr>,
     pub op: Option<BinaryOp>,
-    pub op_loc: SourceLoc,
+    pub op_index: TravelIndex,
     pub value: Box<Expr>,
 }
