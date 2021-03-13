@@ -3,7 +3,7 @@
 use std::convert::TryFrom;
 
 use crate::{
-    c::StringEncoding,
+    c::StringEnc,
     error::{
         CodedError,
         MayUnwind,
@@ -68,50 +68,16 @@ impl LiteralKind {
 
     pub fn from_character<C, E>(
         chars: C,
-        _encoding: StringEncoding,
-        _on_error: E,
+        encoding: StringEnc,
+        on_error: E,
     ) -> MayUnwind<LiteralKind>
     where
         C: AsRef<str>,
         E: OnLiteralError,
     {
-        // TODO: Character literal handling
-        let chars = chars.as_ref();
-        let _char = if chars.as_bytes().get(0) == Some(&b'\\') {
-            match chars.as_bytes().get(1) {
-                Some(b'\'') => '\'' as u32,
-                Some(b'"') => '"' as u32,
-                Some(b'?') => '?' as u32,
-                Some(b'\\') => '\\' as u32,
-                Some(b'a') => '\u{7}' as u32,
-                Some(b'b') => '\u{8}' as u32,
-                Some(b'f') => '\u{C}' as u32,
-                Some(b'n') => '\n' as u32,
-                Some(b'r') => '\r' as u32,
-                Some(b't') => '\t' as u32,
-                Some(b'v') => '\u{B}' as u32,
-                Some(&c) if c.is_ascii_octdigit() => {
                     unimplemented!()
-                },
-                Some(b'x') => {
-                    unimplemented!()
-                },
-                Some(b'u') => {
-                    unimplemented!()
-                },
-                Some(b'U') => {
-                    unimplemented!()
-                },
-                _ => {
-                    unimplemented!()
-                },
             }
-        } else {
-            chars.chars().next().unwrap() as u32
-        };
-        unimplemented!()
     }
-}
 
 pub trait OnLiteralError = FnMut(LiteralError) -> MayUnwind<()>;
 enum_with_properties! {

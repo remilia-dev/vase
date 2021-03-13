@@ -6,7 +6,7 @@ pub use self::{
     include_type::IncludeType,
     keyword::Keyword,
     kind::TokenKind,
-    string_encoding::StringEncoding,
+    string_enc::StringEnc,
 };
 use crate::util::{
     FileId,
@@ -16,7 +16,7 @@ use crate::util::{
 mod include_type;
 mod keyword;
 mod kind;
-mod string_encoding;
+mod string_enc;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Token {

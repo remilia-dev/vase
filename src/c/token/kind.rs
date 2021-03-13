@@ -9,7 +9,7 @@ use crate::{
     c::{
         IncludeType,
         Keyword,
-        StringEncoding,
+        StringEnc,
     },
     sync::Arc,
     util::CachedString,
@@ -28,7 +28,7 @@ pub enum TokenKind {
     Keyword(Keyword, usize),
     Number(CachedString),
     String {
-        encoding: StringEncoding,
+        encoding: StringEnc,
         has_escapes: bool,
         is_char: bool,
         str_data: Arc<Box<str>>,

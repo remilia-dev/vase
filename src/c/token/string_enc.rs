@@ -8,7 +8,7 @@ use crate::{
 #[variant_list]
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum StringEncoding {
+pub enum StringEnc {
     Default,
     U8,
     WChar16,
@@ -17,7 +17,7 @@ pub enum StringEncoding {
     U32,
 }
 
-impl StringEncoding {
+impl StringEnc {
     pub fn prefix(self) -> Option<&'static str> {
         match self {
             Self::Default => None,

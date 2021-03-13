@@ -492,7 +492,7 @@ impl FrameStack {
                         Arc::new(Box::from(id.string()))
                     };
                     tokens.push(Token::new(loc, true, String {
-                        encoding: crate::c::StringEncoding::Default,
+                        encoding: crate::c::StringEnc::Default,
                         has_escapes: false,
                         is_char: false,
                         str_data,

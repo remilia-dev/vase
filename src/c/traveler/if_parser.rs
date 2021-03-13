@@ -17,7 +17,7 @@ use crate::{
             PrefixOp,
             TernaryExpr,
         },
-        StringEncoding,
+        StringEnc,
         Token,
         TokenKind::*,
         Traveler,
@@ -275,12 +275,7 @@ where OnError: FnMut(TravelerError) -> bool
         Ok(Box::new(Literal { loc, kind }.into()))
     }
 
-    fn parse_char(
-        &mut self,
-        loc: SourceLoc,
-        chars: &str,
-        enc: StringEncoding,
-    ) -> MayUnwind<Box<Expr>> {
+    fn parse_char(&mut self, loc: SourceLoc, chars: &str, enc: StringEnc) -> MayUnwind<Box<Expr>> {
         let kind = LiteralKind::from_character(chars, enc, |err: LiteralError| {
             self.report_error(err.into())
         })?;

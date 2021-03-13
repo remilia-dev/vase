@@ -164,7 +164,7 @@ impl<'a, OnInclude: IncludeCallback> LexerState<'a, OnInclude> {
                 '"' | '<' if matches!(self.mode, CLexerMode::Include { .. }) => {
                     self.lex_include(character)
                 },
-                '\'' | '"' => self.lex_string(StringEncoding::Default, character == '\''),
+                '\'' | '"' => self.lex_string(StringEnc::Default, character == '\''),
                 c if r"~!@#%^&*()[]{}-+=:;\|,.<>/?".contains(c) => self.lex_symbol(c),
                 c if c.is_ascii_digit() => self.lex_number(false, c),
                 c => self.lex_identifier(c),
@@ -417,7 +417,7 @@ impl<'a, OnInclude: IncludeCallback> LexerState<'a, OnInclude> {
         ))
     }
 
-    fn lex_string(&mut self, encoding: StringEncoding, is_char: bool) {
+    fn lex_string(&mut self, encoding: StringEnc, is_char: bool) {
         let opening_char = if is_char { '\'' } else { '"' };
         self.str_builder.clear();
 

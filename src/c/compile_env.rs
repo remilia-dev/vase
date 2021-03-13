@@ -16,7 +16,7 @@ use crate::{
         FileTokens,
         IncludeType,
         Keyword,
-        StringEncoding,
+        StringEnc,
         TokenKind,
     },
     sync::{
@@ -35,7 +35,7 @@ pub struct CompileEnv {
     cache: StringCache,
     cached_to_keywords: HashMap<CachedString, Keyword>,
     cached_to_preprocessor: HashMap<CachedString, TokenKind>,
-    cached_to_str_prefix: HashMap<CachedString, StringEncoding>,
+    cached_to_str_prefix: HashMap<CachedString, StringEnc>,
     // OPTIMIZATION: Maybe OnceArray should operate on Arcs rather than boxes.
     file_id_to_tokens: OnceArray<Arc<FileTokens>>,
 }
@@ -70,7 +70,7 @@ impl CompileEnv {
     pub fn cached_to_preprocessor(&self) -> &HashMap<CachedString, TokenKind> {
         &self.cached_to_preprocessor
     }
-    pub fn cached_to_str_prefix(&self) -> &HashMap<CachedString, StringEncoding> {
+    pub fn cached_to_str_prefix(&self) -> &HashMap<CachedString, StringEnc> {
         &self.cached_to_str_prefix
     }
     pub fn file_id_to_tokens(&self) -> &OnceArray<Arc<FileTokens>> {
@@ -129,7 +129,7 @@ fn update_cache_maps(env: &mut CompileEnv) {
         }
     }
 
-    for &encoding in &StringEncoding::VARIANTS {
+    for &encoding in &StringEnc::VARIANTS {
         if !encoding.should_add(&env.settings) {
             continue;
         }

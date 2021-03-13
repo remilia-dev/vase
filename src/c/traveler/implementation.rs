@@ -14,7 +14,7 @@ use crate::{
         CompileEnv,
         FileTokens,
         Keyword,
-        StringEncoding,
+        StringEnc,
         Token,
         TokenKind,
         TokenKind::*,
@@ -499,7 +499,7 @@ where OnError: FnMut(TravelerError) -> bool
             (
                 Identifier(ref id),
                 String {
-                    encoding: StringEncoding::Default,
+                    encoding: StringEnc::Default,
                     is_char,
                     has_escapes,
                     str_data,
