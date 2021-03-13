@@ -25,6 +25,7 @@ use crate::{
         TravelerError,
     },
     error::{
+        ErrorReceiver,
         MayUnwind,
         Unwind,
     },
@@ -36,19 +37,15 @@ use crate::{
 
 type Error = crate::c::TravelerErrorKind;
 
-pub struct IfParser<'a, OnError>
-where OnError: FnMut(TravelerError) -> bool
-{
-    traveler: &'a mut Traveler<OnError>,
+pub struct IfParser<'a, E: ErrorReceiver<TravelerError>> {
+    traveler: &'a mut Traveler<E>,
     if_token: &'a Token,
     defined_id: usize,
 }
 
-impl<'a, OnError> IfParser<'a, OnError>
-where OnError: FnMut(TravelerError) -> bool
-{
+impl<'a, E: ErrorReceiver<TravelerError>> IfParser<'a, E> {
     pub fn create_and_parse(
-        traveler: &'a mut Traveler<OnError>,
+        traveler: &'a mut Traveler<E>,
         if_token: &'a Token,
     ) -> MayUnwind<Box<Expr>> {
         let defined_id = traveler.env.cache().get_or_cache("defined").uniq_id();
@@ -251,14 +248,12 @@ where OnError: FnMut(TravelerError) -> bool
             },
         };
         let range = lparen_index..self.traveler.index();
-        Ok(Box::new(
-            ParenExpr { range, expr }.into(),
-        ))
+        Ok(Box::new(ParenExpr { range, expr }.into()))
     }
 
     fn parse_number(&mut self, loc: SourceLoc, digits: CachedString) -> MayUnwind<Box<Expr>> {
-        let mut kind = LiteralKind::from_number(digits.as_ref(), |err: LiteralError| {
-            self.report_error(err.into())
+        let mut kind = LiteralKind::from_number(digits.as_ref(), &mut |err: LiteralError| {
+            self.report_error(err.into()).is_err()
         })?;
         if kind.is_real() {
             let error = Error::IfReal(self.if_token.clone(), self.clone_head());
@@ -276,8 +271,8 @@ where OnError: FnMut(TravelerError) -> bool
     }
 
     fn parse_char(&mut self, loc: SourceLoc, chars: &str, enc: StringEnc) -> MayUnwind<Box<Expr>> {
-        let mut kind = LiteralKind::from_character(chars, enc, |err: LiteralError| {
-            self.report_error(err.into())
+        let mut kind = LiteralKind::from_character(chars, enc, &mut |err: LiteralError| {
+            self.report_error(err.into()).is_err()
         })?;
         kind = match kind {
             // Only the I32 should occur

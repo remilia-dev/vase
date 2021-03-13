@@ -20,6 +20,7 @@ use crate::{
         TokenKind::*,
     },
     error::{
+        ErrorReceiver,
         MayUnwind,
         Unwind,
     },
@@ -32,26 +33,22 @@ use crate::{
 
 type Error = crate::c::traveler::TravelerErrorKind;
 
-pub struct Traveler<OnError>
-where OnError: FnMut(TravelerError) -> bool
-{
+pub struct Traveler<E: ErrorReceiver<TravelerError>> {
     pub(super) env: Arc<CompileEnv>,
     pub(super) frames: FrameStack,
     str_builder: StringBuilder,
-    on_error: OnError,
+    errors: E,
 }
 
-impl<OnError> Traveler<OnError>
-where OnError: FnMut(TravelerError) -> bool
-{
-    pub fn new(env: Arc<CompileEnv>, on_error: OnError) -> Self {
+impl<E: ErrorReceiver<TravelerError>> Traveler<E> {
+    pub fn new(env: Arc<CompileEnv>, errors: E) -> Self {
         let frames = FrameStack::new(env.clone());
         // OPTIMIZATION: A different hasher may be more performant
         Traveler {
             env,
             frames,
             str_builder: StringBuilder::new(),
-            on_error,
+            errors,
         }
     }
 
@@ -144,7 +141,7 @@ where OnError: FnMut(TravelerError) -> bool
                 ref token if token.is_definable() => {
                     let definable_id = token.get_definable_id();
                     if let Some(handle) = self.frames.should_handle_macro(definable_id) {
-                        self.frames.handle_macro(handle, &mut self.on_error)?;
+                        self.frames.handle_macro(handle, &mut self.errors)?;
                     } else {
                         break;
                     }
@@ -557,13 +554,7 @@ where OnError: FnMut(TravelerError) -> bool
     }
 
     fn report_error_with_state(&mut self, v: Error, state: TravelerState) -> MayUnwind<()> {
-        use crate::error::CodedError;
-        let mut fatal = v.severity().is_fatal();
-        let error = TravelerError { kind: v, state };
-
-        fatal |= (self.on_error)(error);
-
-        if fatal { Err(Unwind::Fatal) } else { Ok(()) }
+        self.errors.report(TravelerError { kind: v, state })
     }
 
     fn skip_past_preprocessor(&mut self) -> usize {

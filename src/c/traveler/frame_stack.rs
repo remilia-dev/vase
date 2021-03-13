@@ -20,7 +20,10 @@ use crate::{
         TokenKind,
         TokenKind::*,
     },
-    error::MayUnwind,
+    error::{
+        ErrorReceiver,
+        MayUnwind,
+    },
     sync::Arc,
     util::{
         CachedString,
@@ -29,7 +32,7 @@ use crate::{
 };
 
 type Error = crate::c::TravelerErrorKind;
-type ErrorCallback<'a> = &'a mut dyn FnMut(TravelerError) -> bool;
+type Receiver<'a> = &'a mut dyn ErrorReceiver<TravelerError>;
 
 /// A manager struct for where [Traveler](super::Traveler) is in a token stack.
 ///
@@ -362,7 +365,7 @@ impl FrameStack {
         }
     }
 
-    pub fn handle_macro(&mut self, handle: MacroHandle, on_error: ErrorCallback) -> MayUnwind<()> {
+    pub fn handle_macro(&mut self, handle: MacroHandle, errors: Receiver) -> MayUnwind<()> {
         match handle {
             MacroHandle::Empty => {
                 // Move past the empty token.
@@ -373,7 +376,7 @@ impl FrameStack {
                 self.frames.push_front(frame)
             },
             MacroHandle::FuncMacro { macro_id, param_count } => {
-                self.handle_function_macro(macro_id, param_count, on_error)?;
+                self.handle_function_macro(macro_id, param_count, errors)?;
             },
         }
         Ok(())
@@ -383,12 +386,12 @@ impl FrameStack {
         &mut self,
         macro_id: usize,
         param_count: usize,
-        on_error: ErrorCallback,
+        errors: Receiver,
     ) -> MayUnwind<()> {
         // Pass the ID of the macro
         self.move_forward();
 
-        let mut param_tokens = self.collect_func_macro_invocation(param_count, on_error)?;
+        let mut param_tokens = self.collect_func_macro_invocation(param_count, errors)?;
 
         if let MacroKind::FuncMacro {
             file_id,
@@ -412,7 +415,7 @@ impl FrameStack {
             if param_count < id_count {
                 self.report_error(
                     Error::FuncInvokeMissingArgs(id_count - param_count),
-                    on_error,
+                    errors,
                 )?;
                 for id in &param_ids[param_count..id_count] {
                     param_map.insert(*id, Vec::new());
@@ -427,12 +430,12 @@ impl FrameStack {
                     param_map.insert(id, Vec::new());
                 },
                 (None, Some(tokens)) => {
-                    self.report_error(Error::FuncInvokeExcessParameters(tokens), on_error)?;
+                    self.report_error(Error::FuncInvokeExcessParameters(tokens), errors)?;
                 },
                 (None, None) => {},
             }
 
-            self.create_func_macro_frame(file_id, index, end, macro_id, param_map, on_error)
+            self.create_func_macro_frame(file_id, index, end, macro_id, param_map, errors)
         } else {
             panic!("Can't handle a function macro on a non-function macro.");
         }
@@ -445,7 +448,7 @@ impl FrameStack {
         end: usize,
         macro_id: usize,
         params: HashMap<usize, Vec<Token>>,
-        on_error: ErrorCallback,
+        errors: Receiver,
     ) -> MayUnwind<()> {
         // By assuming each parameter will show up at least once, we get a good initial capacity estimation.
         let sum_parameter_lengths = params.iter().fold(0, |accum, value| accum + value.1.len());
@@ -474,7 +477,7 @@ impl FrameStack {
                         token if token.is_definable() => token.get_definable_id(),
                         _ => {
                             let error = Error::StringifyExpectsId(self.head().clone());
-                            self.report_error(error, on_error)?;
+                            self.report_error(error, errors)?;
                             continue;
                         },
                     };
@@ -488,7 +491,7 @@ impl FrameStack {
                             _ => self.env.cache().get_or_cache(id_token.kind().text()),
                         };
                         let error = Error::StringifyNonParameter(id_token);
-                        self.report_error(error, on_error)?;
+                        self.report_error(error, errors)?;
                         Arc::new(Box::from(id.string()))
                     };
                     tokens.push(Token::new(loc, true, String {
@@ -508,11 +511,11 @@ impl FrameStack {
                             } else if self.is_token_joiner_next() {
                                 self.move_forward();
                             }
-                            self.handle_macro(handle, on_error)?;
+                            self.handle_macro(handle, errors)?;
                             continue;
                         },
                         Some(handle) => {
-                            self.handle_macro(handle, on_error)?;
+                            self.handle_macro(handle, errors)?;
                             continue;
                         },
                         None => tokens.push(head.clone()),
@@ -521,7 +524,7 @@ impl FrameStack {
                 ref def if def.is_definable() => {
                     let macro_id = def.get_definable_id();
                     if let Some(handle) = self.should_handle_macro(macro_id) {
-                        self.handle_macro(handle, on_error)?;
+                        self.handle_macro(handle, errors)?;
                         continue;
                     } else {
                         tokens.push(head.clone());
@@ -549,7 +552,7 @@ impl FrameStack {
     fn collect_func_macro_invocation(
         &mut self,
         param_count: usize,
-        on_error: ErrorCallback,
+        errors: Receiver,
     ) -> MayUnwind<Vec<Vec<Token>>> {
         let mut param_tokens = vec![Vec::new()];
         let mut paren_layers = 0usize;
@@ -574,7 +577,7 @@ impl FrameStack {
                 _ if head.kind().is_preprocessor() => {
                     param_tokens.last_mut().unwrap().push(head.clone());
                     let error = Error::FuncInvokePreprocessorInArgs(head.clone());
-                    self.report_error(error, on_error)?;
+                    self.report_error(error, errors)?;
                     in_preprocessor = true;
                     continue;
                 },
@@ -583,12 +586,12 @@ impl FrameStack {
                         in_preprocessor = false;
                         param_tokens.last_mut().unwrap().push(head.clone());
                     } else {
-                        self.report_error(Error::InnerFuncInvokeUnfinished, on_error)?;
+                        self.report_error(Error::InnerFuncInvokeUnfinished, errors)?;
                         break;
                     }
                 },
                 Eof => {
-                    self.report_error(Error::InnerFuncInvokeUnfinished, on_error)?;
+                    self.report_error(Error::InnerFuncInvokeUnfinished, errors)?;
                     break;
                 },
                 _ => {},
@@ -599,11 +602,11 @@ impl FrameStack {
         Ok(param_tokens)
     }
 
-    fn report_error(&self, kind: Error, on_error: ErrorCallback) -> MayUnwind<()> {
+    fn report_error(&self, kind: Error, errors: Receiver) -> MayUnwind<()> {
         use crate::error::CodedError;
         let mut fatal = kind.severity().is_fatal();
 
-        fatal |= on_error(TravelerError { state: self.save_state(), kind });
+        fatal |= errors.report_error(TravelerError { state: self.save_state(), kind });
 
         if fatal {
             Err(crate::error::Unwind::Fatal)
