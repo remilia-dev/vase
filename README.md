@@ -24,3 +24,6 @@ than other compilers.
 Right now the code is licensed under GPLv3 or later (see LICENSE).
 However, I do wish to retain the ability to re-license the whole
 project should I desire to.
+
+Files under the include directory have a different license. See
+[the include README](./include/README.md).
