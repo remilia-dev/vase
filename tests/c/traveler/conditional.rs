@@ -133,3 +133,29 @@ fn preprocessor_if_conditions_work() {
         ],
     );
 }
+
+#[test]
+fn preprocessor_if_char_literals_work() {
+    let env = new_env();
+    let cache = env.cache();
+    run_test(
+        env.clone(),
+        &[r#"
+        #if '\0' || '\00' || '\000'
+            IsFalse
+        #endif
+
+        #if 'z' - 'a' == 25
+            IsTrue
+        #endif
+
+        #if u'\uFFFF' == 0xFFFF
+            UnicodeWorks
+        #endif
+        "#],
+        &[
+            Identifier(cache.get_or_cache("IsTrue")),
+            Identifier(cache.get_or_cache("UnicodeWorks")),
+        ],
+    );
+}

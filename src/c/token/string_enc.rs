@@ -36,4 +36,12 @@ impl StringEnc {
             _ => true,
         }
     }
+
+    pub fn mask(self) -> u32 {
+        match self {
+            Self::Default | Self::U8 => 0xFF,
+            Self::WChar16 | Self::U16 => 0xFFFF,
+            Self::WChar32 | Self::U32 => 0xFFFF_FFFF,
+        }
+    }
 }

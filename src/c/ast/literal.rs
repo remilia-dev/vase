@@ -75,9 +75,9 @@ impl LiteralKind {
         C: AsRef<str>,
         E: OnLiteralError,
     {
-                    unimplemented!()
-            }
+        parse_character(chars.as_ref(), encoding, on_error)
     }
+}
 
 pub trait OnLiteralError = FnMut(LiteralError) -> MayUnwind<()>;
 enum_with_properties! {
@@ -92,11 +92,21 @@ enum_with_properties! {
         InvalidIntSuffix(String),
         #[values(Error, 603)]
         InvalidRealSuffix(String),
+        #[values(Error, 610)]
+        InvalidEscape(Option<char>),
+        #[values(Error, 611)]
+        ExtraChars(usize),
+        #[values(Error, 612)]
+        CharTooBigForEncoding(u32, StringEnc),
+        #[values(Error, 613)]
+        UnicodeEscapeMissingDigits(u32),
         // == Warnings
         #[values(Warning, 300)]
         OverflowOccured(bool),
         #[values(Warning, 301)]
         ExcessPrecision(u32),
+        #[values(Warning, 310)]
+        CharOverflowed,
     }
 
     impl CodedError for LiteralError {
@@ -127,6 +137,25 @@ enum_with_properties! {
                     "'{}' is not a valid suffix for a real number.",
                     suffix
                 ),
+                InvalidEscape(maybe) => match maybe {
+                    Some(char) => format!(
+                        "\\{} is not a valid escape sequence",
+                        char
+                    ),
+                    None => "Something has to follow a backslash in a character constant.".to_owned()
+                },
+                ExtraChars(count) => format!(
+                    "There are {} excess characters in the literal. These are ignored.",
+                    count
+                ),
+                CharTooBigForEncoding(char, encoding) => format!(
+                    "The character literal has a value of {} but the literal's encoding only supports up to {}.",
+                    char, encoding.mask()
+                ),
+                UnicodeEscapeMissingDigits(count) => format!(
+                    "The unicode character escape expects {} more hexadecimal digits.",
+                    count
+                ),
                 // == Warnings
                 OverflowOccured(is_exp) => format!(
                     "Overflow occured while parsing this number{}.",
@@ -136,6 +165,7 @@ enum_with_properties! {
                     "The last {} digits have no effect on the number.",
                     digits
                 ),
+                CharOverflowed => "Overflow occured while parsing \\x escape.".to_owned(),
             }
         }
     }
@@ -378,4 +408,98 @@ enum SuffixType {
     Decimal32,
     Decimal64,
     Decimal128,
+}
+
+pub fn parse_character<E: OnLiteralError>(
+    chars: &str,
+    encoding: StringEnc,
+    mut on_error: E,
+) -> MayUnwind<LiteralKind> {
+    let (char, used) = if chars.as_bytes().get(0) == Some(&b'\\') {
+        match chars.as_bytes().get(1) {
+            Some(b'\'') => ('\'' as u32, 2),
+            Some(b'"') => ('"' as u32, 2),
+            Some(b'?') => ('?' as u32, 2),
+            Some(b'\\') => ('\\' as u32, 2),
+            Some(b'a') => ('\u{7}' as u32, 2),
+            Some(b'b') => ('\u{8}' as u32, 2),
+            Some(b'f') => ('\u{C}' as u32, 2),
+            Some(b'n') => ('\n' as u32, 2),
+            Some(b'r') => ('\r' as u32, 2),
+            Some(b't') => ('\t' as u32, 2),
+            Some(b'v') => ('\u{B}' as u32, 2),
+            Some(&c) if c.is_ascii_octdigit() => {
+                let mut result = parse_complex_character(
+                    NumBase::Octal, //
+                    &chars[1..],
+                    3,
+                    &mut on_error,
+                )?;
+                result.1 += 1;
+                result
+            },
+            Some(b'x') => {
+                let mut result = parse_complex_character(
+                    NumBase::Hexadecimal, //
+                    &chars[2..],
+                    usize::MAX,
+                    &mut on_error,
+                )?;
+                result.1 += 2;
+                result
+            },
+            Some(b'u') | Some(b'U') => {
+                let max = if chars.as_bytes()[1] == b'u' { 4 } else { 8 };
+                let mut result = parse_complex_character(
+                    NumBase::Hexadecimal, //
+                    &chars[2..],
+                    max,
+                    &mut on_error,
+                )?;
+                if result.1 != max {
+                    let missing = (max - result.1) as u32;
+                    on_error(LiteralError::UnicodeEscapeMissingDigits(missing))?;
+                }
+                result.1 += 2;
+                result
+            },
+            _ => {
+                let char = chars.chars().nth(1);
+                on_error(LiteralError::InvalidEscape(char))?;
+                (char.map_or(0, |c| c as u32), chars.len())
+            },
+        }
+    } else {
+        (chars.chars().next().unwrap() as u32, 1)
+    };
+
+    if used < chars.len() {
+        on_error(LiteralError::ExtraChars(chars.len() - used))?;
+    }
+
+    let mask = encoding.mask();
+    if char & !mask != 0 {
+        on_error(LiteralError::CharTooBigForEncoding(char, encoding))?;
+        Ok(((char & mask) as i32).into())
+    } else {
+        Ok((char as i32).into())
+    }
+}
+
+fn parse_complex_character<E: OnLiteralError>(
+    base: NumBase,
+    chars: &str,
+    max_digits: usize,
+    on_error: &mut E,
+) -> MayUnwind<(u32, usize)> {
+    let (mut digit_count, _) = base.find_end_of_digits(chars, false);
+    digit_count = digit_count.min(max_digits);
+    let digits = &chars[..digit_count];
+    let parsed = base.parse_int::<u32, _>(digits).unwrap();
+
+    if parsed.overflowed {
+        on_error(LiteralError::CharOverflowed)?;
+    }
+
+    Ok((parsed.number, digit_count))
 }

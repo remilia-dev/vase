@@ -276,9 +276,17 @@ where OnError: FnMut(TravelerError) -> bool
     }
 
     fn parse_char(&mut self, loc: SourceLoc, chars: &str, enc: StringEnc) -> MayUnwind<Box<Expr>> {
-        let kind = LiteralKind::from_character(chars, enc, |err: LiteralError| {
+        let mut kind = LiteralKind::from_character(chars, enc, |err: LiteralError| {
             self.report_error(err.into())
         })?;
+        kind = match kind {
+            // Only the I32 should occur
+            LiteralKind::I32(i) => (i as i64).into(),
+            LiteralKind::U32(u) => (u as u64).into(),
+            LiteralKind::F32(f) => (f as i64).into(),
+            LiteralKind::F64(f) => (f as i64).into(),
+            l => l,
+        };
         self.move_forward()?;
         Ok(Box::new(Literal { loc, kind }.into()))
     }

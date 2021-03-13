@@ -14,7 +14,9 @@ use vase::{
         Lexer,
         TokenKind,
         Traveler,
+        TravelerError,
     },
+    error::CodedError,
     math::NonMaxU32,
     sync::Arc,
     util::CachedString,
@@ -39,8 +41,12 @@ fn run_test(env: Arc<CompileEnv>, sources: &[&str], expected: &[TokenKind]) {
         env.file_id_to_tokens().push(Arc::new(tokens));
     }
 
-    let mut traveler = Traveler::new(env.clone(), &|err| {
-        panic!("An error should not have occured: {:?}", err);
+    let mut traveler = Traveler::new(env.clone(), &|err: TravelerError| {
+        panic!(
+            "An error should not have occured: {:?}\n{}",
+            &err,
+            err.message()
+        );
     });
     traveler
         .load_start(env.file_id_to_tokens()[0.into()].clone())
