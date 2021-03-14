@@ -37,15 +37,15 @@ use crate::{
 
 type Error = crate::c::TravelerErrorKind;
 
-pub struct IfParser<'a, E: ErrorReceiver<TravelerError>> {
-    traveler: &'a mut Traveler<E>,
+pub struct IfParser<'a, 'b, E: ErrorReceiver<TravelerError>> {
+    traveler: &'a mut Traveler<'b, E>,
     if_token: &'a Token,
     defined_id: usize,
 }
 
-impl<'a, E: ErrorReceiver<TravelerError>> IfParser<'a, E> {
+impl<'a, 'b, E: ErrorReceiver<TravelerError>> IfParser<'a, 'b, E> {
     pub fn create_and_parse(
-        traveler: &'a mut Traveler<E>,
+        traveler: &'a mut Traveler<'b, E>,
         if_token: &'a Token,
     ) -> MayUnwind<Box<Expr>> {
         let defined_id = traveler.env.cache().get_or_cache("defined").uniq_id();
@@ -253,7 +253,7 @@ impl<'a, E: ErrorReceiver<TravelerError>> IfParser<'a, E> {
 
     fn parse_number(&mut self, loc: SourceLoc, digits: CachedString) -> MayUnwind<Box<Expr>> {
         let mut kind = LiteralKind::from_number(digits.as_ref(), &mut |err: LiteralError| {
-            self.report_error(err.into()).is_err()
+            self.traveler.report_error(err.into()).is_err()
         })?;
         if kind.is_real() {
             let error = Error::IfReal(self.if_token.clone(), self.clone_head());
@@ -272,7 +272,7 @@ impl<'a, E: ErrorReceiver<TravelerError>> IfParser<'a, E> {
 
     fn parse_char(&mut self, loc: SourceLoc, chars: &str, enc: StringEnc) -> MayUnwind<Box<Expr>> {
         let mut kind = LiteralKind::from_character(chars, enc, &mut |err: LiteralError| {
-            self.report_error(err.into()).is_err()
+            self.traveler.report_error(err.into()).is_err()
         })?;
         kind = match kind {
             // Only the I32 should occur
