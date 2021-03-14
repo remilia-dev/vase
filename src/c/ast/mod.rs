@@ -8,10 +8,10 @@ pub use expr::{
     PrefixExpr,
     TernaryExpr,
 };
-pub use literal::{
-    Literal,
-    LiteralError,
-    LiteralKind,
+pub use number::{
+    Number,
+    NumberError,
+    NumberKind,
 };
 pub use operators::{
     Associativity,
@@ -22,6 +22,6 @@ pub use operators::{
 pub use visitor::ExprVisitor;
 
 mod expr;
-mod literal;
+mod number;
 mod operators;
 mod visitor;

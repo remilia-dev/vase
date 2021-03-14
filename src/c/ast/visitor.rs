@@ -11,7 +11,7 @@ pub trait ExprVisitor {
     }
     fn visit_expr(&mut self, expr: &mut Expr) -> MayUnwind<()> {
         match *expr {
-            Expr::Literal(ref mut lit) => self.on_literal(lit),
+            Expr::Number(ref mut lit) => self.on_number(lit),
             Expr::Parens(ref mut expr) => self.on_parens(expr),
             Expr::Prefix(ref mut expr) => self.on_prefix(expr),
             Expr::Binary(ref mut expr) => self.on_binary(expr),
@@ -20,7 +20,7 @@ pub trait ExprVisitor {
         }
     }
 
-    fn on_literal(&mut self, _lit: &mut Literal) -> MayUnwind<()> {
+    fn on_number(&mut self, _lit: &mut Number) -> MayUnwind<()> {
         Ok(())
     }
 

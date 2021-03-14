@@ -5,7 +5,7 @@ use crate::{
         ast::{
         Associativity,
         BinaryOp,
-        Literal,
+            Number,
         Precedence,
         PrefixOp,
     },
@@ -18,7 +18,7 @@ use crate::{
 #[create_intos]
 #[derive(Clone, Debug)]
 pub enum Expr {
-    Literal(Literal),
+    Number(Number),
     Parens(ParenExpr),
     Prefix(PrefixExpr),
     Binary(BinaryExpr),
@@ -30,7 +30,7 @@ impl Expr {
     pub fn precedence(&self) -> Precedence {
         use Expr::*;
         match *self {
-            Literal(..) | Parens(..) => Precedence::Atoms,
+            Number(..) | Parens(..) => Precedence::Atoms,
             Binary(ref expr) => expr.op.precedence(),
             Prefix(..) => Precedence::Prefixes,
             Ternary(..) => Precedence::Ternary,
@@ -65,7 +65,7 @@ impl Expr {
         use replace_with::replace_with_or_abort as replace_or_abort;
         let replace_with = |rhs: Box<Expr>| rhs.add_op(precedence, create);
         match *self {
-            Self::Literal(..) => panic!("Can't take right on a literal. It makes no sense!"),
+            Self::Number(..) => panic!("Can't take right on a number. It makes no sense!"),
             Self::Parens(..) => panic!("Can't take right on parenthesis. It makes no sense!"),
             Self::Prefix(ref mut expr) => replace_or_abort(&mut expr.expr, replace_with),
             Self::Binary(ref mut expr) => replace_or_abort(&mut expr.rhs, replace_with),

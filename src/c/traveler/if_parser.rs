@@ -8,9 +8,9 @@ use crate::{
             BinaryExpr,
             BinaryOp,
             Expr,
-            Literal,
-            LiteralError,
-            LiteralKind,
+            Number,
+            NumberError,
+            NumberKind,
             ParenExpr,
             Precedence,
             PrefixExpr,
@@ -134,7 +134,7 @@ impl<'a, 'b, E: ErrorReceiver<TravelerError>> IfParser<'a, 'b, E> {
             Identifier(..) => {
                 let loc = head.loc();
                 self.move_forward()?;
-                Ok(Box::new(Literal { loc, kind: 0i64.into() }.into()))
+                Ok(Box::new(Number { loc, kind: 0i64.into() }.into()))
             },
             Number(ref digits) => {
                 let digits = digits.clone();
@@ -167,7 +167,7 @@ impl<'a, 'b, E: ErrorReceiver<TravelerError>> IfParser<'a, 'b, E> {
                 let loc = head.loc();
                 let error = Error::IfExpectedAtom(self.if_token.clone(), head.clone());
                 self.report_error(error)?;
-                Ok(Box::new(Literal { loc, kind: 0i64.into() }.into()))
+                Ok(Box::new(Number { loc, kind: 0i64.into() }.into()))
             },
             _ => {
                 let error = Error::IfExpectedAtom(self.if_token.clone(), head.clone());
@@ -194,7 +194,7 @@ impl<'a, 'b, E: ErrorReceiver<TravelerError>> IfParser<'a, 'b, E> {
                 );
                 self.report_error(error)?;
                 self.move_forward()?;
-                return Ok(Box::new(Literal { loc, kind: 0i64.into() }.into()));
+                return Ok(Box::new(Number { loc, kind: 0i64.into() }.into()));
             },
             PreEnd => {
                 let loc = head.loc();
@@ -204,7 +204,7 @@ impl<'a, 'b, E: ErrorReceiver<TravelerError>> IfParser<'a, 'b, E> {
                     self.clone_head(),
                 );
                 self.report_error(error)?;
-                return Ok(Box::new(Literal { loc, kind: 0i64.into() }.into()));
+                return Ok(Box::new(Number { loc, kind: 0i64.into() }.into()));
             },
             _ => {
                 let error = Error::IfDefinedNotDefinable(
@@ -230,7 +230,7 @@ impl<'a, 'b, E: ErrorReceiver<TravelerError>> IfParser<'a, 'b, E> {
         }
 
         let value = self.traveler.frames.has_macro(id) as i64;
-        Ok(Box::new(Literal { loc, kind: value.into() }.into()))
+        Ok(Box::new(Number { loc, kind: value.into() }.into()))
     }
 
     fn parse_parens(&mut self, lparen_index: TravelIndex) -> MayUnwind<Box<Expr>> {
@@ -252,7 +252,7 @@ impl<'a, 'b, E: ErrorReceiver<TravelerError>> IfParser<'a, 'b, E> {
     }
 
     fn parse_number(&mut self, loc: SourceLoc, digits: CachedString) -> MayUnwind<Box<Expr>> {
-        let mut kind = LiteralKind::from_number(digits.as_ref(), &mut |err: LiteralError| {
+        let mut kind = NumberKind::from_number(digits.as_ref(), &mut |err: NumberError| {
             self.traveler.report_error(err.into()).is_err()
         })?;
         if kind.is_real() {
@@ -260,30 +260,30 @@ impl<'a, 'b, E: ErrorReceiver<TravelerError>> IfParser<'a, 'b, E> {
             self.report_error(error)?;
         }
         kind = match kind {
-            LiteralKind::I32(i) => (i as i64).into(),
-            LiteralKind::U32(u) => (u as u64).into(),
-            LiteralKind::F32(f) => (f as i64).into(),
-            LiteralKind::F64(f) => (f as i64).into(),
+            NumberKind::I32(i) => (i as i64).into(),
+            NumberKind::U32(u) => (u as u64).into(),
+            NumberKind::F32(f) => (f as i64).into(),
+            NumberKind::F64(f) => (f as i64).into(),
             l => l,
         };
         self.move_forward()?;
-        Ok(Box::new(Literal { loc, kind }.into()))
+        Ok(Box::new(Number { loc, kind }.into()))
     }
 
     fn parse_char(&mut self, loc: SourceLoc, chars: &str, enc: StringEnc) -> MayUnwind<Box<Expr>> {
-        let mut kind = LiteralKind::from_character(chars, enc, &mut |err: LiteralError| {
+        let mut kind = NumberKind::from_character(chars, enc, &mut |err: NumberError| {
             self.traveler.report_error(err.into()).is_err()
         })?;
         kind = match kind {
             // Only the I32 should occur
-            LiteralKind::I32(i) => (i as i64).into(),
-            LiteralKind::U32(u) => (u as u64).into(),
-            LiteralKind::F32(f) => (f as i64).into(),
-            LiteralKind::F64(f) => (f as i64).into(),
+            NumberKind::I32(i) => (i as i64).into(),
+            NumberKind::U32(u) => (u as u64).into(),
+            NumberKind::F32(f) => (f as i64).into(),
+            NumberKind::F64(f) => (f as i64).into(),
             l => l,
         };
         self.move_forward()?;
-        Ok(Box::new(Literal { loc, kind }.into()))
+        Ok(Box::new(Number { loc, kind }.into()))
     }
 
     fn move_frame_forward(&mut self) -> &Token {

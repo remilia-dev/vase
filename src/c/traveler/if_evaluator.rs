@@ -27,12 +27,12 @@ pub struct IfEvaluator<E: OnError> {
 }
 
 impl<E: OnError> ExprVisitor for IfEvaluator<E> {
-    fn on_literal(&mut self, lit: &mut Literal) -> MayUnwind<()> {
+    fn on_number(&mut self, lit: &mut Number) -> MayUnwind<()> {
         // If this is the first literal we've encountered, make the accumulator it.
         if self.accum.is_none() {
             self.accum = match lit.kind {
-                LiteralKind::I64(i) => Some(i.into()),
-                LiteralKind::U64(u) => Some(u.into()),
+                NumberKind::I64(i) => Some(i.into()),
+                NumberKind::U64(u) => Some(u.into()),
                 _ => {
                     (self.on_error)(Error::Unreachable(
                         "Only I64 and U64 literals should appear in an #if/#elif tree.",

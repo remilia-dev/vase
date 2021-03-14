@@ -4,7 +4,7 @@ use crate::{
     c::{
         ast::{
             BinaryExpr,
-            LiteralError,
+            NumberError,
             PrefixExpr,
         },
         IncludeType,
@@ -56,9 +56,9 @@ enum_with_properties! {
     pub enum TravelerErrorKind {
         // == Others
         #[values(v0.severity(), v0.code_number())]
-        LexerError(LexerError),
+        Lexer(LexerError),
         #[values(v0.severity(), v0.code_number())]
-        LiteralError(LiteralError),
+        Number(NumberError),
         // == Internals
         #[values(Internal, 900)]
         Unimplemented(&'static str),
@@ -67,7 +67,7 @@ enum_with_properties! {
         #[values(Internal, 902)]
         MissingIncludeId(FileId),
         // == Fatals
-        #[values(Error, 800)]
+        #[values(Fatal, 800)]
         ErrorPreprocessor(Option<Arc<Box<str>>>),
         // == Errors
         #[values(Error, 500)]
@@ -165,8 +165,8 @@ enum_with_properties! {
 
         fn code_prefix(&self) -> &'static str {
             match *self {
-                Self::LexerError(ref error) => error.code_prefix(),
-                Self::LiteralError(ref error) => error.code_prefix(),
+                Self::Lexer(ref error) => error.code_prefix(),
+                Self::Number(ref error) => error.code_prefix(),
                 _ => "C-T",
             }
         }
@@ -180,13 +180,13 @@ enum_with_properties! {
 
 impl From<LexerError> for TravelerErrorKind {
     fn from(error: LexerError) -> Self {
-        TravelerErrorKind::LexerError(error)
+        TravelerErrorKind::Lexer(error)
     }
 }
 
-impl From<LiteralError> for TravelerErrorKind {
-    fn from(error: LiteralError) -> Self {
-        TravelerErrorKind::LiteralError(error)
+impl From<NumberError> for TravelerErrorKind {
+    fn from(error: NumberError) -> Self {
+        TravelerErrorKind::Number(error)
     }
 }
 
@@ -200,8 +200,8 @@ impl TravelerErrorKind {
         use TravelerErrorKind::*;
         match *self {
             // == Others
-            LexerError(ref error) => error.message(),
-            LiteralError(ref error) => error.message(),
+            Lexer(ref error) => error.message(),
+            Number(ref error) => error.message(),
             // == Internals
             Unimplemented(thing) => format!(
                 "{} is currently unimplemented.",

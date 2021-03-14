@@ -25,14 +25,14 @@ use crate::{
 };
 
 #[derive(Clone, Debug)]
-pub struct Literal {
+pub struct Number {
     pub loc: SourceLoc,
-    pub kind: LiteralKind,
+    pub kind: NumberKind,
 }
 
 #[create_intos]
 #[derive(Clone, Debug)]
-pub enum LiteralKind {
+pub enum NumberKind {
     I32(i32),
     U32(u32),
     I64(i64),
@@ -41,7 +41,7 @@ pub enum LiteralKind {
     F64(f64),
 }
 
-impl LiteralKind {
+impl NumberKind {
     pub fn is_real(&self) -> bool {
         matches!(self, Self::F32(..) | Self::F64(..))
     }
@@ -59,24 +59,24 @@ impl LiteralKind {
         }
     }
 
-    pub fn from_number<D>(digits: D, on_error: LiteralReceiver) -> MayUnwind<LiteralKind>
+    pub fn from_number<D>(digits: D, errors: NumberReceiver) -> MayUnwind<NumberKind>
     where D: AsRef<[u8]> {
-        LiteralDecoder::create_and_calc(digits.as_ref(), on_error)
+        NumberDecoder::create_and_calc(digits.as_ref(), errors)
     }
 
     pub fn from_character<C: AsRef<str>>(
         chars: C,
         encoding: StringEnc,
-        errors: LiteralReceiver,
-    ) -> MayUnwind<LiteralKind> {
+        errors: NumberReceiver,
+    ) -> MayUnwind<NumberKind> {
         parse_character(chars.as_ref(), encoding, errors)
     }
 }
 
-pub type LiteralReceiver<'a> = &'a mut dyn ErrorReceiver<LiteralError>;
+pub type NumberReceiver<'a> = &'a mut dyn ErrorReceiver<NumberError>;
 enum_with_properties! {
     #[derive(Clone, Debug)]
-    pub enum LiteralError {
+    pub enum NumberError {
         // == Errors
         #[values(Error, 600)]
         EmptyNumber,
@@ -103,7 +103,7 @@ enum_with_properties! {
         CharOverflowed,
     }
 
-    impl CodedError for LiteralError {
+    impl CodedError for NumberError {
         #[property]
         fn severity(&self) -> Severity {
             use Severity::*;
@@ -118,7 +118,7 @@ enum_with_properties! {
         }
 
         fn message(&self) -> String {
-            use LiteralError::*;
+            use NumberError::*;
             match *self {
                 // == Errors
                 EmptyNumber => "This number has no digits.".to_owned(),
@@ -165,8 +165,8 @@ enum_with_properties! {
     }
 }
 
-struct LiteralDecoder<'a> {
-    errors: LiteralReceiver<'a>,
+struct NumberDecoder<'a> {
+    errors: NumberReceiver<'a>,
     base: NumBase,
     number: &'a [u8],
     has_dot: bool,
@@ -176,12 +176,12 @@ struct LiteralDecoder<'a> {
     suffix: &'a [u8],
 }
 
-impl<'a> LiteralDecoder<'a> {
-    fn create_and_calc(number: &'a [u8], errors: LiteralReceiver<'a>) -> MayUnwind<LiteralKind> {
+impl<'a> NumberDecoder<'a> {
+    fn create_and_calc(number: &'a [u8], errors: NumberReceiver<'a>) -> MayUnwind<NumberKind> {
         Self::new(number, errors).calc_number()
     }
 
-    fn new(number: &'a [u8], errors: LiteralReceiver<'a>) -> Self {
+    fn new(number: &'a [u8], errors: NumberReceiver<'a>) -> Self {
         let mut prefix_length = 0;
         let mut base = NumBase::Decimal;
         if number.get(0) == Some(&b'0') {
@@ -237,7 +237,7 @@ impl<'a> LiteralDecoder<'a> {
         }
     }
 
-    fn calc_number(&mut self) -> MayUnwind<LiteralKind> {
+    fn calc_number(&mut self) -> MayUnwind<NumberKind> {
         self.report_empty_segments()?;
         let suffix = self.decode_suffix()?;
 
@@ -366,10 +366,10 @@ impl<'a> LiteralDecoder<'a> {
 
     fn unwrap_parsed<N>(&mut self, parsed: ParsedNumber<N>, exponent: bool) -> MayUnwind<N> {
         if parsed.overflowed {
-            self.errors.report(LiteralError::OverflowOccured(exponent))?;
+            self.errors.report(NumberError::OverflowOccured(exponent))?;
         }
         if parsed.excess_precision != 0 {
-            let error = LiteralError::ExcessPrecision(parsed.excess_precision);
+            let error = NumberError::ExcessPrecision(parsed.excess_precision);
             self.errors.report(error)?;
         }
         Ok(parsed.number)
@@ -378,18 +378,18 @@ impl<'a> LiteralDecoder<'a> {
     fn report_invalid_suffix(&mut self) -> MayUnwind<()> {
         let suffix = String::from_utf8(self.suffix.into()).unwrap();
         if self.has_dot {
-            self.errors.report(LiteralError::InvalidRealSuffix(suffix))
+            self.errors.report(NumberError::InvalidRealSuffix(suffix))
         } else {
-            self.errors.report(LiteralError::InvalidIntSuffix(suffix))
+            self.errors.report(NumberError::InvalidIntSuffix(suffix))
         }
     }
 
     fn report_empty_segments(&mut self) -> MayUnwind<()> {
         if self.number.is_empty() {
-            self.errors.report(LiteralError::EmptyNumber)?;
+            self.errors.report(NumberError::EmptyNumber)?;
         }
         if self.exp_base.is_some() && self.suffix.is_empty() {
-            self.errors.report(LiteralError::EmptyExponent)?;
+            self.errors.report(NumberError::EmptyExponent)?;
         }
         Ok(())
     }
@@ -408,8 +408,8 @@ enum SuffixType {
 pub fn parse_character(
     chars: &str,
     encoding: StringEnc,
-    errors: LiteralReceiver,
-) -> MayUnwind<LiteralKind> {
+    errors: NumberReceiver,
+) -> MayUnwind<NumberKind> {
     let (char, used) = if chars.as_bytes().get(0) == Some(&b'\\') {
         match chars.as_bytes().get(1) {
             Some(b'\'') => ('\'' as u32, 2),
@@ -453,14 +453,14 @@ pub fn parse_character(
                 )?;
                 if result.1 != max {
                     let missing = (max - result.1) as u32;
-                    errors.report(LiteralError::UnicodeEscapeMissingDigits(missing))?;
+                    errors.report(NumberError::UnicodeEscapeMissingDigits(missing))?;
                 }
                 result.1 += 2;
                 result
             },
             _ => {
                 let char = chars.chars().nth(1);
-                errors.report(LiteralError::InvalidEscape(char))?;
+                errors.report(NumberError::InvalidEscape(char))?;
                 (char.map_or(0, |c| c as u32), chars.len())
             },
         }
@@ -469,12 +469,12 @@ pub fn parse_character(
     };
 
     if used < chars.len() {
-        errors.report(LiteralError::ExtraChars(chars.len() - used))?;
+        errors.report(NumberError::ExtraChars(chars.len() - used))?;
     }
 
     let mask = encoding.mask();
     if char & !mask != 0 {
-        errors.report(LiteralError::CharTooBigForEncoding(char, encoding))?;
+        errors.report(NumberError::CharTooBigForEncoding(char, encoding))?;
         Ok(((char & mask) as i32).into())
     } else {
         Ok((char as i32).into())
@@ -485,7 +485,7 @@ fn parse_complex_character(
     base: NumBase,
     chars: &str,
     max_digits: usize,
-    errors: LiteralReceiver,
+    errors: NumberReceiver,
 ) -> MayUnwind<(u32, usize)> {
     let (mut digit_count, _) = base.find_end_of_digits(chars, false);
     digit_count = digit_count.min(max_digits);
@@ -493,7 +493,7 @@ fn parse_complex_character(
     let parsed = base.parse_int::<u32, _>(digits).unwrap();
 
     if parsed.overflowed {
-        errors.report(LiteralError::CharOverflowed)?;
+        errors.report(NumberError::CharOverflowed)?;
     }
 
     Ok((parsed.number, digit_count))
