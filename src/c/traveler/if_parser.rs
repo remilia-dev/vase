@@ -29,10 +29,7 @@ use crate::{
         MayUnwind,
         Unwind,
     },
-    util::{
-        CachedString,
-        SourceLoc,
-    },
+    util::CachedString,
 };
 
 type Error = crate::c::TravelerErrorKind;
@@ -127,19 +124,19 @@ impl<'a, 'b, E: ErrorReceiver<TravelerError>> IfParser<'a, 'b, E> {
         match *head.kind() {
             // 'defined macro_id' or 'defined(macro_id)'
             Identifier(ref id) if id.uniq_id() == self.defined_id => {
-                let loc = head.loc();
-                self.parse_defined(loc)
+                let index = self.traveler.index();
+                self.parse_defined(index)
             },
             // Undefined identifiers are replaced with 0s
             Identifier(..) => {
-                let loc = head.loc();
+                let index = self.traveler.index();
                 self.move_forward()?;
-                Ok(Box::new(Number { loc, kind: 0i64.into() }.into()))
+                Ok(Box::new(Number { kind: 0i64.into(), index }.into()))
             },
             Number(ref digits) => {
                 let digits = digits.clone();
-                let loc = head.loc();
-                self.parse_number(loc, digits)
+                let index = self.traveler.index();
+                self.parse_number(index, digits)
             },
             Plus | Minus | Tilde | Bang => {
                 let op: PrefixOp = head.kind().try_into().unwrap();
@@ -160,14 +157,14 @@ impl<'a, 'b, E: ErrorReceiver<TravelerError>> IfParser<'a, 'b, E> {
                 ..
             } => {
                 let str_data = str_data.clone();
-                let loc = head.loc();
-                self.parse_char(loc, &*str_data, encoding)
+                let index = self.traveler.index();
+                self.parse_char(index, &*str_data, encoding)
             },
             PreEnd => {
-                let loc = head.loc();
+                let index = self.traveler.index();
                 let error = Error::IfExpectedAtom(self.if_token.clone(), head.clone());
                 self.report_error(error)?;
-                Ok(Box::new(Number { loc, kind: 0i64.into() }.into()))
+                Ok(Box::new(Number { index, kind: 0i64.into() }.into()))
             },
             _ => {
                 let error = Error::IfExpectedAtom(self.if_token.clone(), head.clone());
@@ -178,7 +175,7 @@ impl<'a, 'b, E: ErrorReceiver<TravelerError>> IfParser<'a, 'b, E> {
         }
     }
 
-    fn parse_defined(&mut self, loc: SourceLoc) -> MayUnwind<Box<Expr>> {
+    fn parse_defined(&mut self, index: TravelIndex) -> MayUnwind<Box<Expr>> {
         let (head, has_parens) = match self.move_frame_forward() {
             token if matches!(token.kind(), &LParen) => (self.move_frame_forward(), true),
             token => (token, false),
@@ -194,17 +191,16 @@ impl<'a, 'b, E: ErrorReceiver<TravelerError>> IfParser<'a, 'b, E> {
                 );
                 self.report_error(error)?;
                 self.move_forward()?;
-                return Ok(Box::new(Number { loc, kind: 0i64.into() }.into()));
+                return Ok(Box::new(Number { index, kind: 0i64.into() }.into()));
             },
             PreEnd => {
-                let loc = head.loc();
                 let error = Error::IfDefinedNotDefinable(
                     self.if_token.clone(),
                     has_parens,
                     self.clone_head(),
                 );
                 self.report_error(error)?;
-                return Ok(Box::new(Number { loc, kind: 0i64.into() }.into()));
+                return Ok(Box::new(Number { index, kind: 0i64.into() }.into()));
             },
             _ => {
                 let error = Error::IfDefinedNotDefinable(
@@ -230,7 +226,7 @@ impl<'a, 'b, E: ErrorReceiver<TravelerError>> IfParser<'a, 'b, E> {
         }
 
         let value = self.traveler.frames.has_macro(id) as i64;
-        Ok(Box::new(Number { loc, kind: value.into() }.into()))
+        Ok(Box::new(Number { index, kind: value.into() }.into()))
     }
 
     fn parse_parens(&mut self, lparen_index: TravelIndex) -> MayUnwind<Box<Expr>> {
@@ -251,7 +247,7 @@ impl<'a, 'b, E: ErrorReceiver<TravelerError>> IfParser<'a, 'b, E> {
         Ok(Box::new(ParenExpr { range, expr }.into()))
     }
 
-    fn parse_number(&mut self, loc: SourceLoc, digits: CachedString) -> MayUnwind<Box<Expr>> {
+    fn parse_number(&mut self, index: TravelIndex, digits: CachedString) -> MayUnwind<Box<Expr>> {
         let mut kind = NumberKind::from_number(digits.as_ref(), &mut |err: NumberError| {
             self.traveler.report_error(err.into()).is_err()
         })?;
@@ -267,10 +263,15 @@ impl<'a, 'b, E: ErrorReceiver<TravelerError>> IfParser<'a, 'b, E> {
             l => l,
         };
         self.move_forward()?;
-        Ok(Box::new(Number { loc, kind }.into()))
+        Ok(Box::new(Number { kind, index }.into()))
     }
 
-    fn parse_char(&mut self, loc: SourceLoc, chars: &str, enc: StringEnc) -> MayUnwind<Box<Expr>> {
+    fn parse_char(
+        &mut self,
+        index: TravelIndex,
+        chars: &str,
+        enc: StringEnc,
+    ) -> MayUnwind<Box<Expr>> {
         let mut kind = NumberKind::from_character(chars, enc, &mut |err: NumberError| {
             self.traveler.report_error(err.into()).is_err()
         })?;
@@ -283,7 +284,7 @@ impl<'a, 'b, E: ErrorReceiver<TravelerError>> IfParser<'a, 'b, E> {
             l => l,
         };
         self.move_forward()?;
-        Ok(Box::new(Number { loc, kind }.into()))
+        Ok(Box::new(Number { kind, index }.into()))
     }
 
     fn move_frame_forward(&mut self) -> &Token {

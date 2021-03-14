@@ -3,7 +3,10 @@
 use std::convert::TryFrom;
 
 use crate::{
-    c::StringEnc,
+    c::{
+        StringEnc,
+        TravelIndex,
+    },
     error::{
         CodedError,
         ErrorReceiver,
@@ -20,14 +23,13 @@ use crate::{
         create_intos,
         enum_with_properties,
         CharExt,
-        SourceLoc,
     },
 };
 
 #[derive(Clone, Debug)]
 pub struct Number {
-    pub loc: SourceLoc,
     pub kind: NumberKind,
+    pub index: TravelIndex,
 }
 
 #[create_intos]
