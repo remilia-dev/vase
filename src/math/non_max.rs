@@ -26,6 +26,13 @@ impl NonMaxU32 {
     pub fn get(self) -> u32 {
         !self.0.get()
     }
+    /// Increments the value stored inside.
+    /// # Panics
+    /// Panics if the value is incremented to [u32::MAX].
+    pub fn increment(&mut self) {
+        let new_value = Self::new(self.get() + 1);
+        *self = new_value.expect("NonMaxU32 was incremented beyond its maximum value.");
+    }
 }
 
 impl fmt::Debug for NonMaxU32 {
