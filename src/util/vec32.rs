@@ -57,6 +57,10 @@ impl<T> Vec32<T> {
         self.0.clear();
     }
 
+    pub fn truncate(&mut self, len: NonMaxU32) {
+        self.0.truncate(len.get() as usize);
+    }
+
     pub fn len(&self) -> NonMaxU32 {
         // SAFETY: Only Deref (not DerefMut) is implemented. All mutable functions
         // that can possibly increase the internal Vec's size call check_size().
