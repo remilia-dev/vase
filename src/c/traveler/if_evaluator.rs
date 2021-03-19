@@ -147,7 +147,7 @@ impl<E: OnError> ExprVisitor for IfEvaluator<E> {
         }
     }
 
-    fn on_assignment(&mut self, _: &mut AssignmentExpr) -> MayUnwind<()> {
+    fn on_assign(&mut self, _: &mut AssignExpr) -> MayUnwind<()> {
         (self.on_error)(Error::Unreachable(
             "Assignment operators should not occur in a #if/#elif condition",
         ))

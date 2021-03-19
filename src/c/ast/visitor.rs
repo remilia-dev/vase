@@ -16,7 +16,7 @@ pub trait ExprVisitor {
             Expr::Prefix(ref mut expr) => self.on_prefix(expr),
             Expr::Binary(ref mut expr) => self.on_binary(expr),
             Expr::Ternary(ref mut expr) => self.on_ternary(expr),
-            Expr::Assignment(ref mut expr) => self.on_assignment(expr),
+            Expr::Assign(ref mut expr) => self.on_assign(expr),
         }
     }
 
@@ -52,10 +52,10 @@ pub trait ExprVisitor {
         self.on_expr(&mut expr.if_false)
     }
 
-    fn on_assignment(&mut self, expr: &mut AssignmentExpr) -> MayUnwind<()> {
-        self.visit_assignment(expr)
+    fn on_assign(&mut self, expr: &mut AssignExpr) -> MayUnwind<()> {
+        self.visit_assign(expr)
     }
-    fn visit_assignment(&mut self, expr: &mut AssignmentExpr) -> MayUnwind<()> {
+    fn visit_assign(&mut self, expr: &mut AssignExpr) -> MayUnwind<()> {
         self.on_expr(&mut expr.value)?;
         self.on_expr(&mut expr.to)
     }

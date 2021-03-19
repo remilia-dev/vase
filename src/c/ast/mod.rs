@@ -14,6 +14,7 @@ pub use number::{
     NumberKind,
 };
 pub use operators::{
+    AssignOp,
     Associativity,
     BinaryOp,
     Precedence,

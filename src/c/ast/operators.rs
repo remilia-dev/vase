@@ -185,3 +185,40 @@ impl std::convert::TryFrom<&TokenKind> for BinaryOp {
         })
     }
 }
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum AssignOp {
+    None,
+    Multiplication,
+    Divide,
+    Modulo,
+    Addition,
+    Subtraction,
+    LShift,
+    RShift,
+    BitAnd,
+    BitXor,
+    BitOr,
+}
+
+impl std::convert::TryFrom<&TokenKind> for AssignOp {
+    type Error = ();
+
+    fn try_from(kind: &TokenKind) -> Result<Self, Self::Error> {
+        use TokenKind::*;
+        Ok(match *kind {
+            Equal => Self::None,
+            StarEqual => Self::Multiplication,
+            SlashEqual => Self::Divide,
+            PercentEqual => Self::Modulo,
+            PlusEqual => Self::Addition,
+            MinusEqual => Self::Subtraction,
+            LShiftEqual => Self::LShift,
+            RShiftEqual => Self::RShift,
+            AmpEqual => Self::BitAnd,
+            CarrotEqual => Self::BitXor,
+            BarEqual => Self::BitOr,
+            _ => return Err(()),
+        })
+    }
+}

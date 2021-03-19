@@ -3,12 +3,13 @@
 use crate::{
     c::{
         ast::{
-        Associativity,
-        BinaryOp,
+            AssignOp,
+            Associativity,
+            BinaryOp,
             Number,
-        Precedence,
-        PrefixOp,
-    },
+            Precedence,
+            PrefixOp,
+        },
         TravelIndex,
         TravelRange,
     },
@@ -23,7 +24,7 @@ pub enum Expr {
     Prefix(PrefixExpr),
     Binary(BinaryExpr),
     Ternary(TernaryExpr),
-    Assignment(AssignmentExpr),
+    Assign(AssignExpr),
 }
 
 impl Expr {
@@ -34,7 +35,7 @@ impl Expr {
             Binary(ref expr) => expr.op.precedence(),
             Prefix(..) => Precedence::Prefixes,
             Ternary(..) => Precedence::Ternary,
-            Assignment(..) => Precedence::Assignment,
+            Assign(..) => Precedence::Assignment,
         }
     }
 
@@ -70,7 +71,7 @@ impl Expr {
             Self::Prefix(ref mut expr) => replace_or_abort(&mut expr.expr, replace_with),
             Self::Binary(ref mut expr) => replace_or_abort(&mut expr.rhs, replace_with),
             Self::Ternary(ref mut expr) => replace_or_abort(&mut expr.if_false, replace_with),
-            Self::Assignment(ref mut expr) => replace_or_abort(&mut expr.value, replace_with),
+            Self::Assign(ref mut expr) => replace_or_abort(&mut expr.value, replace_with),
         }
     }
 }
@@ -112,9 +113,9 @@ pub struct TernaryExpr {
 }
 
 #[derive(Clone, Debug)]
-pub struct AssignmentExpr {
+pub struct AssignExpr {
     pub to: Box<Expr>,
-    pub op: Option<BinaryOp>,
+    pub op: AssignOp,
     pub op_index: TravelIndex,
     pub value: Box<Expr>,
 }
