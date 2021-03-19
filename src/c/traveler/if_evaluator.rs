@@ -1,7 +1,5 @@
 // Copyright 2021. remilia-dev
 // This source code is licensed under GPLv3 or any later version.
-use std::convert::TryInto;
-
 use crate::{
     c::{
         ast::*,
@@ -15,6 +13,7 @@ use crate::{
         Integer,
         Sign,
     },
+    util::Conversions,
 };
 
 type Error = crate::c::TravelerErrorKind;

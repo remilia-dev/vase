@@ -5,6 +5,7 @@ pub use char_ext::{
     DecodedChar,
     Utf8DecodeError,
 };
+pub use convert::Conversions;
 pub use ptr_equality::PtrEquality;
 pub use source_loc::{
     FileId,
@@ -26,6 +27,7 @@ pub use vec32::Vec32;
 pub mod mem;
 
 mod char_ext;
+mod convert;
 mod ptr_equality;
 mod source_loc;
 mod string_builder;
