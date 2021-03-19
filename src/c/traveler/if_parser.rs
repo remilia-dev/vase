@@ -51,46 +51,40 @@ impl<'a, 'b, E: ErrorReceiver<TravelerError>> IfParser<'a, 'b, E> {
     }
 
     fn parse_expression(&mut self) -> MayUnwind<Box<Expr>> {
-        let mut expression = self.parse_atom()?;
+        let mut expr = self.parse_atom()?;
 
         loop {
             let head = self.head();
-            expression = match *head.kind() {
-                ref op if op.is_binary_op() => {
-                    let op_index = self.traveler.index();
-                    let op: BinaryOp = op.try_into().unwrap();
-                    self.move_forward()?;
-                    let rhs = self.parse_atom()?;
-                    expression.add_op(op.precedence(), |lhs| {
-                        Expr::Binary(BinaryExpr { lhs, op, op_index, rhs }).into()
-                    })
-                },
-                QMark => {
-                    let qmark_index = self.traveler.index();
-                    self.parse_ternary(expression, qmark_index)?
-                },
-                Comma => {
-                    self.report_error(Error::CommaInIfCondition)?;
-                    self.move_forward()?;
-                    self.parse_expression()?
-                },
-                RParen | Colon | PreEnd => break,
-                _ => {
-                    let error = Error::IfExpectedOp(self.if_token.clone(), head.clone());
-                    self.report_error(error)?;
-                    return Err(Unwind::Block);
-                },
+            if let Ok(op) = head.kind().try_into::<BinaryOp>() {
+                let op_index = self.traveler.index();
+                self.move_forward()?;
+                let rhs = self.parse_atom()?;
+                expr = expr.add_op(op.precedence(), |lhs| {
+                    Expr::Binary(BinaryExpr { lhs, op, op_index, rhs }).into()
+                });
+            } else {
+                expr = match *head.kind() {
+                    QMark => self.parse_ternary(expr)?,
+                    Comma => {
+                        self.report_error(Error::CommaInIfCondition)?;
+                        self.move_forward()?;
+                        self.parse_expression()?
+                    },
+                    Colon | RParen | PreEnd => break,
+                    _ => {
+                        let error = Error::IfExpectedOp(self.if_token.clone(), head.clone());
+                        self.report_error(error)?;
+                        return Err(Unwind::Block);
+                    },
+                };
             }
         }
 
-        Ok(expression)
+        Ok(expr)
     }
 
-    fn parse_ternary(
-        &mut self,
-        expression: Box<Expr>,
-        qmark_index: TravelIndex,
-    ) -> MayUnwind<Box<Expr>> {
+    fn parse_ternary(&mut self, expr: Box<Expr>) -> MayUnwind<Box<Expr>> {
+        let qmark_index = self.traveler.index();
         // Move past the ?
         self.move_forward()?;
         let if_true = self.parse_expression()?;
@@ -108,15 +102,15 @@ impl<'a, 'b, E: ErrorReceiver<TravelerError>> IfParser<'a, 'b, E> {
 
         let if_false = self.parse_expression()?;
 
-        Ok(expression.add_op(Precedence::Ternary, |condition| {
-            Expr::Ternary(TernaryExpr {
+        Ok(expr.add_op(Precedence::Ternary, |condition| {
+            let new_expr = TernaryExpr {
                 condition,
                 qmark_index,
                 if_true,
                 colon_index,
                 if_false,
-            })
-            .into()
+            };
+            Box::new(new_expr.into())
         }))
     }
 
