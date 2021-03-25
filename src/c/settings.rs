@@ -23,14 +23,17 @@ impl Default for CompileSettings {
             source_files: Vec::new(),
             wchar_is_16_bytes: false,
         };
-        let mut current_exe = std::env::current_exe().unwrap();
-        current_exe.pop();
-        current_exe.push("include");
+        #[cfg(feature = "file-reading")]
+        {
+            let mut current_exe = std::env::current_exe().unwrap();
+            current_exe.pop();
+            current_exe.push("include");
 
-        // TODO: Make include path generic for the OS.
-        res.system_includes.push(Box::from(current_exe.as_path()));
-        res.system_includes.push(Box::from(Path::new("/usr/local/include")));
-        res.system_includes.push(Box::from(Path::new("/usr/include/")));
+            // TODO: Make include path generic for the OS.
+            res.system_includes.push(Box::from(current_exe.as_path()));
+            res.system_includes.push(Box::from(Path::new("/usr/local/include")));
+            res.system_includes.push(Box::from(Path::new("/usr/include/")));
+        }
         res
     }
 }

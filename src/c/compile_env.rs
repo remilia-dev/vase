@@ -5,6 +5,7 @@ use std::{
     path::Path,
 };
 
+#[cfg(feature = "multithreading")]
 use rayon::{
     ThreadPool,
     ThreadPoolBuilder,
@@ -31,6 +32,7 @@ use crate::{
 
 pub struct CompileEnv {
     settings: CompileSettings,
+    #[cfg(feature = "multithreading")]
     threads: Arc<ThreadPool>,
     cache: StringCache,
     cached_to_keywords: HashMap<CachedString, Keyword>,
@@ -44,6 +46,7 @@ impl CompileEnv {
         // OPTIMIZATION: May be able to improve the hashmaps by using a different hasher or hashmap.
         let mut env = CompileEnv {
             settings,
+            #[cfg(feature = "multithreading")]
             threads: Arc::new(ThreadPoolBuilder::new().build().unwrap()),
             cache: StringCache::new(),
             cached_to_keywords: HashMap::new(),
@@ -58,6 +61,8 @@ impl CompileEnv {
     pub fn settings(&self) -> &CompileSettings {
         &self.settings
     }
+
+    #[cfg(feature = "multithreading")]
     pub fn threads(&self) -> &Arc<ThreadPool> {
         &self.threads
     }

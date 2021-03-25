@@ -52,6 +52,7 @@ impl<'a, OnInclude: IncludeCallback> Lexer<'a, OnInclude> {
     /// # Errors
     /// Only *fatal* lexer errors are returned. Other errors (such as improperly ended strings)
     /// are reported using a [LexerError](TokenKind::LexerError) token.
+    #[cfg(feature = "file-reading")]
     pub fn lex_file(&mut self, file_id: FileId, file_path: Arc<Path>) -> FileTokens {
         // The scope is here to free file resources early.
         {

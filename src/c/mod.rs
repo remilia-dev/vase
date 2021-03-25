@@ -8,6 +8,7 @@ pub use lexer_error::{
     LexerError,
     LexerErrorKind,
 };
+#[cfg(all(feature = "file-reading", feature = "multithreading"))]
 pub use multi_lexer::MultiLexer;
 pub use settings::*;
 pub use token::*;
@@ -19,6 +20,7 @@ mod file_reader;
 mod file_tokens;
 mod lexer;
 mod lexer_error;
+#[cfg(all(feature = "file-reading", feature = "multithreading"))]
 mod multi_lexer;
 mod settings;
 mod token;

@@ -27,14 +27,16 @@ pub use parking_lot::{
 
 // Re-exports of this crate's sync utilities
 // The self:: prefix is to prevent rustfmt from combining them with the re-exports.
+#[cfg(feature = "multithreading")]
+pub use self::work_queue::WorkQueue;
 pub use self::{
     atomic_arc::AtomicArc,
     atomic_box::AtomicBox,
     once_array::OnceArray,
-    work_queue::WorkQueue,
 };
 
 mod atomic_arc;
 mod atomic_box;
 mod once_array;
+#[cfg(feature = "multithreading")]
 mod work_queue;
