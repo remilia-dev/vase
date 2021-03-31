@@ -8,6 +8,36 @@ mod create_intos;
 mod enum_with_properties;
 mod util;
 mod variant_list;
+mod variant_names;
+
+/// A macro to create `impl From<Type>` blocks for enums containing a variant made of just a `Type`.
+///
+/// # Example
+/// ```
+/// # use vase_macros::create_intos;
+/// #[create_intos]
+/// enum MaybeResult<T, E> {
+///     Some(T),
+///     Err { error: E },
+///     /// This one will not receive an into since it has no fields.
+///     None,
+///     /// This one will not receive an into since it has more than 1 field.
+///     DoubleTrouble(T, E),
+/// }
+///
+/// #[test]
+/// fn into_conversion() {
+///     let some: MaybeResult<u8, &'static str> = 0.into();
+///     assert!(matches!(some, MaybeResult::Some(..)));
+///     let err: MaybeResult<u8, &'static str> = "Test".into();
+///     assert!(matches!(err, MaybeResult::Err(..)));
+/// }
+/// ```
+#[proc_macro_attribute]
+pub fn create_intos(_: TokenStream, item: TokenStream) -> TokenStream {
+    let enum_ = syn::parse_macro_input!(item as syn::ItemEnum);
+    create_intos::create_intos(enum_)
+}
 
 /// A macro to define an enum with specific properties.
 ///
@@ -55,36 +85,7 @@ pub fn enum_with_properties(input: TokenStream) -> TokenStream {
     enum_.to_stream()
 }
 
-/// A macro to create `impl From<Type>` blocks for enums containing a variant made of just a `Type`.
-///
-/// # Example
-/// ```
-/// # use vase_macros::create_intos;
-/// #[create_intos]
-/// enum MaybeResult<T, E> {
-///     Some(T),
-///     Err { error: E },
-///     /// This one will not receive an into since it has no fields.
-///     None,
-///     /// This one will not receive an into since it has more than 1 field.
-///     DoubleTrouble(T, E),
-/// }
-///
-/// #[test]
-/// fn into_conversion() {
-///     let some: MaybeResult<u8, &'static str> = 0.into();
-///     assert!(matches!(some, MaybeResult::Some(..)));
-///     let err: MaybeResult<u8, &'static str> = "Test".into();
-///     assert!(matches!(err, MaybeResult::Err(..)));
-/// }
-/// ```
-#[proc_macro_attribute]
-pub fn create_intos(_: TokenStream, item: TokenStream) -> TokenStream {
-    let enum_ = syn::parse_macro_input!(item as syn::ItemEnum);
-    create_intos::create_intos(enum_)
-}
-
-/// A macro that generates a constant VARIANT array that contains each
+/// A macro that generates a constant `VARIANT` array that contains each
 /// variant of the enum.
 ///
 /// This macro can only be added to enums that only have field-less variants.
@@ -111,4 +112,28 @@ pub fn create_intos(_: TokenStream, item: TokenStream) -> TokenStream {
 pub fn variant_list(_: TokenStream, item: TokenStream) -> TokenStream {
     let enum_ = syn::parse_macro_input!(item as syn::ItemEnum);
     variant_list::variant_list(enum_)
+}
+
+/// A macro to create an `enum_name()` method that gets the name of
+/// an enum value's variant.
+/// # Example
+/// ```
+/// # use vase_macros::enum_names;
+/// #[variant_names]
+/// enum Named {
+///     Foo,
+///     Bar(u8),
+///     Baz { val: u8 },
+/// }
+///
+/// #[test]
+/// fn named_enums() {
+///     assert_eq!(Named::Foo.variant_name(), "Foo");
+///     assert_eq!(Named::Bar(0).variant_name(), "Bar");
+///     assert_eq!(Named::Baz { val: 0 }.variant_name(), "Baz");
+/// }
+#[proc_macro_attribute]
+pub fn variant_names(_: TokenStream, item: TokenStream) -> TokenStream {
+    let enum_ = syn::parse_macro_input!(item as syn::ItemEnum);
+    variant_names::variant_names(enum_)
 }

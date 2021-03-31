@@ -21,6 +21,7 @@ pub use vase_macros::{
     create_intos,
     enum_with_properties,
     variant_list,
+    variant_names,
 };
 pub use vec32::Vec32;
 /// Memory utilities.
