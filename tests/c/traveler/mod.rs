@@ -49,7 +49,7 @@ fn run_test(env: Arc<CompileEnv>, sources: &[&str], expected: &[TokenKind]) {
         );
     });
     traveler
-        .load_start(env.file_id_to_tokens()[0.into()].clone())
+        .load_start(env.file_id_to_tokens().get_arc(0.into()).unwrap())
         .unwrap();
 
     for expected_token in expected.iter() {

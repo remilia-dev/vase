@@ -24,7 +24,7 @@ use crate::sync::{
 /// To allow for an 'atomic' Arc field, we have to make a thread-safe type. This
 /// limits the range of operations to:
 /// * loading the current value (which may be None)
-/// * setting the value if it's None
+/// * setting the value if it is None
 ///
 /// Other operations (such as setting the Arc even if it's not None) requires
 /// exclusive mutable access.
@@ -32,13 +32,14 @@ pub struct AtomicArc<T> {
     ptr: AtomicPtr<T>,
     _phantom: PhantomData<Arc<T>>,
 }
+
 impl<T> AtomicArc<T> {
     /// Creates a new AtomicArc that contains the given Arc.
-    pub fn new(val: Arc<T>) -> Self {
-        // NOTE: into_raw consumes the Arc without decrementing.
-        // AtomicArc now has 1 strong relationship with the Arc.
+    pub fn new(v: Arc<T>) -> Self {
+        // NOTE: into_raw consumes the Arc without decrementing the strong count.
+        // AtomicArc now 'owns' that 1 strong relationship with the Arc.
         AtomicArc {
-            ptr: AtomicPtr::new(Arc::into_raw(val) as *mut T),
+            ptr: AtomicPtr::new(Arc::into_raw(v) as *mut T),
             _phantom: PhantomData,
         }
     }
@@ -46,62 +47,81 @@ impl<T> AtomicArc<T> {
     pub fn new_arc(data: T) -> Self {
         Self::new(Arc::new(data))
     }
-    /// Creates an empty AtomicArc.
-    pub fn empty() -> Self {
+    /// Creates a new AtomicArc from the given raw pointer.
+    ///
+    /// # Safety
+    /// AtomicArc is responsible for decrementing the strong count by one
+    /// when dropped. The pointer must be from [Arc::into_raw].
+    ///
+    /// This pointer may be null, which creates an empty AtomicArc.
+    pub unsafe fn from_raw(raw: *mut T) -> Self {
         AtomicArc {
-            ptr: AtomicPtr::new(null_mut()),
+            ptr: AtomicPtr::new(raw),
             _phantom: PhantomData,
         }
     }
-    /// Gets the potential value using mutability.
+    /// Non-atomically gets the value within this AtomicArc.
+    ///
+    /// See [load](Self::load) for atomics.
     pub fn get(&mut self) -> Option<&T> {
         // SAFETY: This struct keeps the reference count at 1 or more, so it won't be freed.
         unsafe { self.ptr.get_mut().as_ref() }
     }
-    /// Potentially returns a clone of the Arc using mutability.
+    /// Non-atomically gets and clones the Arc contained within this AtomicArc.
+    ///
+    /// See [load_arc](Self::load_arc) for atomics.
     pub fn get_arc(&mut self) -> Option<Arc<T>> {
         let ptr = NonNull::new(*self.ptr.get_mut().deref())?;
-        // SAFETY: We now the ptr is the result of Arc::into_raw and the ptr is stored in self.ptr
+        // SAFETY: We now the ptr is the result of Arc::into_raw.
         unsafe { Some(Self::increment_and_make_arc(ptr)) }
     }
-    /// Sets the value contained to be another Arc.
+    /// Non-atomically gets the value within this AtomicArc if there is one.
+    /// If there is no value in this AtomicArc, it will create a value using
+    /// the given function.
+    pub fn get_or_else<C>(&mut self, create: C) -> &T
+    where C: FnOnce() -> Arc<T> {
+        if self.get().is_none() {
+            self.set(Some(create()));
+        }
+        // SAFETY: Either there was already a value to get *or* one was just set.
+        unsafe { self.get().unwrap_unchecked() }
+    }
+    /// Non-atomically sets the value contained inside this AtomicArc.
     ///
-    /// This function requires exclusive mutability. If you want to set a
-    /// shared AtomicArc, use set_if_none.
-    pub fn set(&mut self, val: Arc<T>) {
+    /// See [Self::set_if_none] if atomics are needed.
+    pub fn set(&mut self, v: Option<Arc<T>>) {
         // SAFETY: We hold a reference count and are getting rid of it.
         if let Some(ptr) = NonNull::new(*self.ptr.get_mut()) {
             unsafe { Arc::decrement_strong_count(ptr.as_ptr()) }
         }
-        // We consume the Arc and take its place
-        *self.ptr.get_mut() = Arc::into_raw(val) as *mut T;
+        *self.ptr.get_mut() = match v {
+            Some(val) => Arc::into_raw(val) as *mut T,
+            None => null_mut(),
+        };
     }
-    /// Loads the potential value in the Arc using the given ordering.
+    /// Atomically loads a reference to the value in this AtomicArc.
     ///
-    /// If there is no Arc, it will return None.
-    pub fn load(&self, order: Ordering) -> Option<&T> {
-        let ptr = self.load_ptr(order)?;
+    /// See [get](Self::get) for a non-atomic variant.
+    pub fn load(&self) -> Option<&T> {
         // SAFETY: This struct keeps the reference count at 1 or more, so it won't be freed.
-        Some(unsafe { &*ptr.as_ptr() })
+        Some(unsafe { self.load_ptr()?.as_ref() })
     }
-    /// Loads and creates a clone of the Arc using the given ordering.
+    /// Atomically loads and clones the Arc contained within this AtomicArc.
     ///
-    /// If there is no Arc, it will return None.
-    pub fn load_arc(&self, order: Ordering) -> Option<Arc<T>> {
-        let ptr = self.load_ptr(order)?;
-        // SAFETY: We now the ptr is the result of Arc::into_raw and the ptr is stored in self.ptr
-        Some(unsafe { Self::increment_and_make_arc(ptr) })
+    /// See [get_arc](Self::get_arc) for a non-atomic variant.
+    pub fn load_arc(&self) -> Option<Arc<T>> {
+        // SAFETY: We now the ptr is the result of Arc::into_raw.
+        Some(unsafe { Self::increment_and_make_arc(self.load_ptr()?) })
     }
-    /// Loads the value contained within or attempts to set the value if there was none.
+    /// Atomically loads the value contained within or attempts to set
+    /// the value if there was None.
     ///
-    /// If self already contains a value, it will be loaded and returned.
-    /// If self did not contain a value, it will call the creation function
-    /// and attempt to set it. Despite calling the creation function, another thread
-    /// may set the value before this one can. In that case, the newly created value
-    /// will be discarded.
-    pub fn load_or_set_arc<F>(&self, create: F) -> Arc<T>
-    where F: FnOnce() -> Arc<T> {
-        let ptr = self.load_ptr(Ordering::SeqCst).unwrap_or_else(|| {
+    /// Even if the create function is called, another thread may set
+    /// the value before this one can. In that case, the newly created
+    /// value will be discarded.
+    pub fn load_or_else<C>(&self, create: C) -> Arc<T>
+    where C: FnOnce() -> Arc<T> {
+        let ptr = self.load_ptr().unwrap_or_else(|| {
             let new_value = create();
             let new_ptr = Arc::as_ptr(&new_value) as *mut T;
             match self
@@ -123,20 +143,15 @@ impl<T> AtomicArc<T> {
         // or it is from a freshly created Arc (in which case it was stored in self.ptr).
         unsafe { AtomicArc::increment_and_make_arc(ptr) }
     }
-    /// Loads the internal pointer that represents the Arc.
-    /// This pointer should be from [Arc::into_raw].
-    fn load_ptr(&self, order: Ordering) -> Option<NonNull<T>> {
-        NonNull::new(self.ptr.load(order))
-    }
     /// Uses a compare-and-exchange operation to attempt to set the value
     /// to the given Arc.
     ///
-    /// If self already contains a value, the Arc will be dropped.
-    /// If self did not contain a value, it will now contain the given Arc.
+    /// If this AtomicArc already contains a value, the given Arc will be dropped.
+    /// If this AtomicArc was empty, it will now contain the given Arc.
     ///
     /// This function returns a reference to the value contained.
-    pub fn set_if_none(&self, to: Arc<T>, success: Ordering, failure: Ordering) -> &T {
-        match self.try_set_if_none(to, success, failure) {
+    pub fn set_if_none(&self, to: Arc<T>) -> &T {
+        match self.try_set_if_none(to) {
             Ok(v) => v,
             Err(v) => v,
         }
@@ -144,20 +159,21 @@ impl<T> AtomicArc<T> {
     /// Uses a compare-and-exchange operation to attempt to set the value
     /// to the given Arc.
     ///
-    /// If self already contains a value, the Arc will be dropped.
-    /// If self did not contain a value, it will now contain the given Arc.
+    /// If this AtomicArc already contains a value, the given Arc will be dropped.
+    /// If this AtomicArc was empty, it will now contain the given Arc.
     ///
     /// This function returns a result that indicates whether the swap
     /// occurred (Ok) or not (Err). Regardless, the value contained in the
-    /// result is a reference to the current value.
-    pub fn try_set_if_none(
-        &self,
-        to: Arc<T>,
-        success: Ordering,
-        failure: Ordering,
-    ) -> Result<&T, &T> {
+    /// result is a reference to the current value of this AtomicArc.
+    pub fn try_set_if_none(&self, to: Arc<T>) -> Result<&T, &T> {
         let raw_new_val = Arc::as_ptr(&to) as *mut T;
-        match self.ptr.compare_exchange(null_mut(), raw_new_val, success, failure) {
+        // OPTIMIZATION: Can different orderings work here?
+        match self.ptr.compare_exchange(
+            null_mut(),
+            raw_new_val,
+            Ordering::SeqCst,
+            Ordering::SeqCst,
+        ) {
             Ok(ptr) => {
                 // NOTE: We have to forget the old Arc since it's ptr is now in self.
                 std::mem::forget(to);
@@ -169,7 +185,12 @@ impl<T> AtomicArc<T> {
             Err(ptr) => Err(unsafe { &*ptr }),
         }
     }
-
+    /// Loads the internal pointer that represents the Arc.
+    /// This pointer should be from [Arc::into_raw].
+    fn load_ptr(&self) -> Option<NonNull<T>> {
+        // OPTIMIZATION: Could we use Ordering::Acquire here?
+        NonNull::new(self.ptr.load(Ordering::SeqCst))
+    }
     /// Increments the strong count of the ptr and then creates a new Arc.
     /// # Safety
     /// 1. The ptr must be from [Arc::into_raw].
@@ -181,6 +202,16 @@ impl<T> AtomicArc<T> {
         Arc::from_raw(ptr.as_ptr())
     }
 }
+
+impl<T> Default for AtomicArc<T> {
+    fn default() -> Self {
+        Self {
+            ptr: AtomicPtr::default(),
+            _phantom: PhantomData,
+        }
+    }
+}
+
 impl<T> Drop for AtomicArc<T> {
     fn drop(&mut self) {
         if let Some(ptr) = NonNull::new(*self.ptr.get_mut()) {
@@ -189,9 +220,10 @@ impl<T> Drop for AtomicArc<T> {
         }
     }
 }
+
 impl<T: fmt::Debug> fmt::Debug for AtomicArc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.load(Ordering::SeqCst).fmt(f)
+        self.load().fmt(f)
     }
 }
 
@@ -210,7 +242,7 @@ mod tests {
 
     #[test]
     fn dropping_empty_atomic_arc_works() {
-        let _ = AtomicArc::<usize>::empty();
+        let _ = AtomicArc::<usize>::default();
     }
 
     #[test]
@@ -230,11 +262,14 @@ mod tests {
     }
 
     #[test]
+    fn from_raw_with_null_is_empty() {
+        let mut aa = unsafe { AtomicArc::<usize>::from_raw(null_mut()) };
+        assert!(aa.get().is_none())
+    }
+
+    #[test]
     fn try_set_returns_ok_when_empty() {
-        let aa = AtomicArc::<usize>::empty();
-        assert!(
-            aa.try_set_if_none(Arc::new(1), Ordering::SeqCst, Ordering::SeqCst)
-                .is_ok()
-        );
+        let aa = AtomicArc::<usize>::default();
+        assert!(aa.try_set_if_none(Arc::new(1)).is_ok());
     }
 }

@@ -217,8 +217,8 @@ impl<const NODE_COUNT: usize> TrieNodeLimited<NODE_COUNT> {
         TrieNodeLimited {
             size: NODE_COUNT as u8,
             is_end_node: AtomicBool::new(false),
-            end_value: AtomicArc::empty(),
-            node_value: AtomicArc::empty(),
+            end_value: AtomicArc::default(),
+            node_value: AtomicArc::default(),
             children: make_static_array::<_, NODE_COUNT>(&|| AtomicU8::new(EMPTY_SLOT_VAL)),
             nodes: make_static_array::<_, NODE_COUNT>(&|| TrieNodePtr::new_null()),
             chain: TrieNodePtr::new_null(),
@@ -229,9 +229,9 @@ impl<const NODE_COUNT: usize> TrieNodeLimited<NODE_COUNT> {
         let mut new_node = TrieNodeLimited::new_empty();
         if value.string.len() != depth {
             *new_node.is_end_node.get_mut() = true;
-            new_node.end_value.set(value);
+            new_node.end_value.set(Some(value));
         } else {
-            new_node.node_value.set(value);
+            new_node.node_value.set(Some(value));
         }
         new_node
     }
@@ -249,8 +249,7 @@ impl<const NODE_COUNT: usize> TrieNodeLimited<NODE_COUNT> {
         if !self.is_end_node.load(Ordering::SeqCst) {
             return None;
         }
-        // OPTIMIZATION: Could we use Ordering::Acquire here?
-        let end_value = self.end_value.load_arc(Ordering::SeqCst)?;
+        let end_value = self.end_value.load_arc()?;
         let first_diff = match data.difference_from(&end_value) {
             // This was actually the value we're looking for
             None => return Some(end_value),
@@ -337,7 +336,7 @@ impl<const NODE_COUNT: usize> TrieNodeLimited<NODE_COUNT> {
 impl<const NODE_COUNT: usize> TrieNode for TrieNodeLimited<NODE_COUNT> {
     fn get_or_cache_string(&self, data: &mut CacheRequest) -> Result<CachedString, &dyn TrieNode> {
         if data.len() == data.depth {
-            let value = self.node_value.load_or_set_arc(&|| data.new_cached());
+            let value = self.node_value.load_or_else(&|| data.new_cached());
             Ok(value)
         } else if let Some(value) = self.move_or_get_end_value(data) {
             Ok(value)

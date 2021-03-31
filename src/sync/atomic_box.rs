@@ -17,66 +17,68 @@ use crate::sync::{
 
 /// A container that owns a heap-allocated value that can be atomically loaded/set.
 ///
-/// To make this type thread-safe, it supports a limited range of operations:
+/// To make this type thread-safe, the range of atomic operations is limited to:
 /// * loading the current value (which may be None)
-/// * setting the value if it's None
+/// * setting the value if it is None
 ///
-/// Other operations are supported only with exclusive mutable access.
-///
-/// # Send and Sync
-/// AtomicBox is only Send if T is Send. AtomicBox is only Sync if T is Sync.
+/// Other operations (such as setting the value even if it's not None) requires
+/// exclusive mutable access.
 pub struct AtomicBox<T> {
     ptr: AtomicPtr<T>,
     _phantom: PhantomData<T>,
 }
 
 impl<T> AtomicBox<T> {
-    /// Creates a new AtomicBox that contains the given value.
-    pub fn new(val: T) -> Self {
-        Self::from_box(Box::new(val))
+    /// Creates a new AtomicBox that contains the given Box.
+    pub fn new(v: Box<T>) -> Self {
+        // SAFETY: Given its a box, we know it was correctly allocated
+        // and that we have exclusive control over the pointer.
+        unsafe { Self::from_raw(Box::into_raw(v)) }
     }
-
-    /// Creates a new AtomicBox from the given box.
-    pub fn from_box(val: Box<T>) -> Self {
-        // SAFETY: Given its a box, we know it was correctly allocated and that we have exclusive
-        // control over the pointer.
-        unsafe { Self::from_raw(Box::into_raw(val)) }
+    // Creates a new AtomicBox that contains the given data.
+    pub fn new_box(data: T) -> Self {
+        Self::new(Box::new(data))
     }
-
     /// Creates a new AtomicBox from the given raw pointer.
     ///
     /// # Safety
-    /// AtomicBox must exclusively own this pointer and the pointer must have been allocated
-    /// correctly.
+    /// AtomicBox must exclusively own this pointer and the pointer must have
+    /// been allocated correctly.
     ///
-    /// The pointer may be null, which creates an empty box.
+    /// The pointer may be null, which creates an empty AtomicBox.
     pub unsafe fn from_raw(raw: *mut T) -> Self {
         AtomicBox {
             ptr: AtomicPtr::new(raw),
-            _phantom: PhantomData::default(),
+            _phantom: PhantomData,
         }
     }
-
-    /// Creates an empty AtomicBox. Use set or set_if_none to set the value.
-    pub fn empty() -> Self {
-        AtomicBox {
-            ptr: AtomicPtr::new(null_mut()),
-            _phantom: PhantomData::default(),
-        }
-    }
-
-    /// Gets the potential value within this box as mutable.
-    pub fn as_mut(&mut self) -> Option<&mut T> {
+    /// Non-atomically gets the value within this AtomicBox as mutable.
+    ///
+    /// See [load](Self::load) for atomics.
+    pub fn get(&mut self) -> Option<&mut T> {
         // SAFETY: The pointer is either null or an exclusive pointer to a value.
         return unsafe { self.ptr.get_mut().as_mut() };
     }
-
-    /// Sets the value contained in this box to another Box's value.
+    /// Non-atomically gets the value within this AtomicBox if there is one.
+    /// If there is no value in this AtomicBox, it will create a value using
+    /// the given function.
+    pub fn get_or_else<C>(&mut self, create: C) -> &mut T
+    where C: FnOnce() -> Box<T> {
+        // Sadly, this is necessary to get around limitations in the borrow checker.
+        if self.get().is_some() {
+            self.set(Some(create()));
+        }
+        // SAFETY: Either there was already a value to get *or* one was just set.
+        unsafe { self.get().unwrap_unchecked() }
+    }
+    /// Non-atomically sets the value contained inside this AtomicBox.
     ///
-    /// This function requires exclusive mutability. If you want to set a shared AtomicBox,
-    /// use set_if_none.
-    pub fn set(&mut self, val: Box<T>) {
-        let mut val_ptr = Box::into_raw(val);
+    /// See [Self::set_if_none] if atomics are needed.
+    pub fn set(&mut self, v: Option<Box<T>>) {
+        let mut val_ptr = match v {
+            Some(b) => Box::into_raw(b),
+            None => null_mut(),
+        };
         swap(&mut val_ptr, self.ptr.get_mut());
         if let Some(raw) = NonNull::new(val_ptr) {
             // SAFETY: We know this value is not null and that this object has exclusive ownership.
@@ -86,46 +88,57 @@ impl<T> AtomicBox<T> {
             }
         }
     }
-
-    /// Loads the potential value in this AtomicBox using the given ordering.
+    /// Atomically loads a reference to the value in this AtomicBox.
     ///
-    /// If the box is empty, it will return None.
-    pub fn load(&self, ordering: Ordering) -> Option<&T> {
+    /// See [get](Self::get) for a non-atomic variant.
+    pub fn load(&self) -> Option<&T> {
         // SAFETY: The pointer is either null or an exclusive pointer to a value.
-        return unsafe { self.ptr.load(ordering).as_ref() };
+        // OPTIMIZATION: Could we use Ordering::Acquire here?
+        return unsafe { self.ptr.load(Ordering::SeqCst).as_ref() };
     }
-
-    /// Uses a compare-and-exchange operation to attempt to set the value contained
-    /// in the box.
+    /// Atomically loads the value contained within or attempts to set
+    /// the value if there was None.
     ///
-    /// If the box already contains a value, the value given will be dropped.
-    /// If the box was empty, the box will now contained the given value.
+    /// Even if the create function is called, another thread may set
+    /// the value before this one can. In that case, the newly created
+    /// value will be discarded.
+    pub fn load_or_else<C>(&self, create: C) -> &T
+    where C: FnOnce() -> Box<T> {
+        if let Some(value) = self.load() {
+            value
+        } else {
+            self.set_if_none(create())
+        }
+    }
+    /// Uses a compare-and-exchange operation to attempt to set the value
+    /// to the given Box.
     ///
-    /// This function returns a reference to the value contained in the box.
-    pub fn set_if_none(&self, val: Box<T>, success: Ordering, failure: Ordering) -> &T {
-        return match self.try_set_if_null(val, success, failure) {
+    /// If this AtomicBox already contains a value, the given Box will be dropped.
+    /// If this AtomicBox was empty, it will now contained the given value box.
+    ///
+    /// This function returns a reference to the value contained.
+    pub fn set_if_none(&self, val: Box<T>) -> &T {
+        return match self.try_set_if_none(val) {
             Ok(current) => current,
             Err(current) => current,
         };
     }
-
-    /// Uses a compare-and-exchange operation to attempt to set the value contained
-    /// in the box.
+    /// Uses a compare-and-exchange operation to attempt to set the value
+    /// to the given Box.
     ///
-    /// If the box already contains a value, the value given will be dropped.
-    /// If the box was empty, the box will now contained the given value.
+    /// If this AtomicBox already contains a value, the given Box will be dropped.
+    /// If this AtomicBox was empty, it will now contained the given value box.
     ///
-    /// This function returns a result that indicates whether the swap occurred (Ok)
-    /// or not (Err). Regardless, the value contained in the result is a reference
-    /// to the current value contained in this box.
-    pub fn try_set_if_null(
-        &self,
-        val: Box<T>,
-        success: Ordering,
-        failure: Ordering,
-    ) -> Result<&T, &T> {
+    /// This function returns a result that indicates whether the swap
+    /// occurred (Ok) or not (Err). Regardless, the value contained in the
+    /// result is a reference to the current value of this AtomicBox.
+    pub fn try_set_if_none(&self, val: Box<T>) -> Result<&T, &T> {
         let new_val = Box::into_raw(val);
-        match self.ptr.compare_exchange(null_mut(), new_val, success, failure) {
+        // OPTIMIZATION: Can different orderings work here?
+        match self
+            .ptr
+            .compare_exchange(null_mut(), new_val, Ordering::SeqCst, Ordering::SeqCst)
+        {
             Ok(_) => {
                 // SAFETY: The exchange occurred so self now controls this pointer.
                 Ok(unsafe { &*new_val })
@@ -138,6 +151,15 @@ impl<T> AtomicBox<T> {
                 // SAFETY: The exchange did not occur, so this is the pointer owned by self.
                 Err(unsafe { &*previous })
             },
+        }
+    }
+}
+
+impl<T> Default for AtomicBox<T> {
+    fn default() -> Self {
+        Self {
+            ptr: AtomicPtr::default(),
+            _phantom: PhantomData,
         }
     }
 }
@@ -156,7 +178,7 @@ impl<T> Drop for AtomicBox<T> {
 
 impl<T: fmt::Debug> fmt::Debug for AtomicBox<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.load(Ordering::SeqCst).fmt(f)
+        self.load().fmt(f)
     }
 }
 
@@ -175,37 +197,34 @@ mod tests {
 
     #[test]
     fn dropping_empty_box_works() {
-        let _ = AtomicBox::<usize>::empty();
+        let _ = AtomicBox::<usize>::default();
     }
 
     #[test]
     fn dropping_occurs() {
         let mut flag = false;
-        let _ = AtomicBox::new(DropTester::new(&mut flag));
+        let _ = AtomicBox::new_box(DropTester::new(&mut flag));
         assert!(flag, "AtomicBox did not drop its value.");
     }
 
     #[test]
     fn new_boxes_from_values_works() {
         const TEST_VAL: usize = 10;
-        let mut ab1 = AtomicBox::new(TEST_VAL);
-        assert_eq!(*ab1.as_mut().unwrap(), TEST_VAL);
-        let mut ab2 = AtomicBox::from_box(Box::new(TEST_VAL));
-        assert_eq!(*ab2.as_mut().unwrap(), TEST_VAL);
+        let mut ab1 = AtomicBox::new_box(TEST_VAL);
+        assert_eq!(*ab1.get().unwrap(), TEST_VAL);
+        let mut ab2 = AtomicBox::new(Box::new(TEST_VAL));
+        assert_eq!(*ab2.get().unwrap(), TEST_VAL);
     }
 
     #[test]
     fn from_raw_with_null_is_empty() {
         let mut ab1 = unsafe { AtomicBox::<usize>::from_raw(null_mut()) };
-        assert_eq!(ab1.as_mut(), None);
+        assert!(ab1.get().is_none());
     }
 
     #[test]
     fn try_set_returns_ok_when_empty() {
-        let ab = AtomicBox::<usize>::empty();
-        assert!(
-            ab.try_set_if_null(Box::new(1), Ordering::SeqCst, Ordering::SeqCst)
-                .is_ok()
-        );
+        let ab = AtomicBox::<usize>::default();
+        assert!(ab.try_set_if_none(Box::new(1)).is_ok());
     }
 }

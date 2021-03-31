@@ -8,6 +8,8 @@
 #![feature(destructuring_assignment)]
 // Required for sensible generics
 #![feature(trait_alias)]
+// Allows cleaner atomic code
+#![feature(option_result_unwrap_unchecked)]
 // The following warnings have been added since they work with the project and have good justifications.
 #![warn(clippy::cognitive_complexity)]
 #![warn(clippy::dbg_macro)]

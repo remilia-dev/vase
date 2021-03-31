@@ -62,7 +62,7 @@ impl MultiLexer {
                     .get_or(|| RefCell::new(Lexer::new(&self.env, &include_callback)))
                     .borrow_mut();
                 let tokens = lexer.lex_file(file_id, to_lex);
-                self.env.file_id_to_tokens().set(file_id, tokens.into());
+                self.env.file_id_to_tokens().set_or_panic(file_id, tokens.into());
             });
         }
     }

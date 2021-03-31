@@ -276,9 +276,8 @@ impl FrameStack {
         self.dependencies.push(file_id);
         let (file_id, length) = match self.file_refs.get(&file_id) {
             Some(file) => (file_id, file.len()),
-            None => match self.env.file_id_to_tokens().get(file_id) {
+            None => match self.env.file_id_to_tokens().get_arc(file_id) {
                 Some(tokens) => {
-                    let tokens = (*tokens).clone();
                     let length = tokens.len();
                     self.file_refs.insert(file_id, tokens);
                     (file_id, length)
