@@ -5,10 +5,14 @@ use crate::{
         CompileSettings,
         LangVersion,
     },
-    util::variant_list,
+    util::{
+        variant_list,
+        variant_names,
+    },
 };
 
 #[variant_list]
+#[variant_names]
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Keyword {
@@ -122,5 +126,53 @@ impl Keyword {
             Self::Inline | Self::Restrict => settings.version >= LangVersion::C99,
             _ => true,
         }
+    }
+
+    pub fn is_type_starter(self) -> bool {
+        self.is_base_type() | self.is_type_modifier() | self.is_storage_class() | self.is_type_tag()
+    }
+
+    pub fn is_type_modifier(self) -> bool {
+        matches!(
+            self,
+            Self::Const
+                | Self::Inline
+                | Self::Long
+                | Self::Short
+                | Self::Signed
+                | Self::Unsigned
+                | Self::Volatile
+                | Self::Atomic
+                | Self::Complex
+                | Self::Imaginary
+                | Self::Noreturn
+                | Self::ThreadLocal
+        )
+    }
+
+    pub fn is_storage_class(self) -> bool {
+        matches!(
+            self,
+            Self::Auto | Self::Static | Self::Extern | Self::Register | Self::Typedef
+        )
+    }
+
+    pub fn is_base_type(self) -> bool {
+        matches!(
+            self,
+            Self::Bool
+                | Self::Char
+                | Self::Int
+                | Self::Float
+                | Self::Double
+                | Self::Void
+                | Self::Decimal32
+                | Self::Decimal64
+                | Self::Decimal128
+        )
+    }
+
+    pub fn is_type_tag(self) -> bool {
+        matches!(self, Self::Struct | Self::Union)
     }
 }

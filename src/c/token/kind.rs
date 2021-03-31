@@ -9,9 +9,13 @@ use crate::{
         StringEnc,
     },
     sync::Arc,
-    util::CachedString,
+    util::{
+        variant_names,
+        CachedString,
+    },
 };
 
+#[variant_names]
 #[repr(u8)]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TokenKind {

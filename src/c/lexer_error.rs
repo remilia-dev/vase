@@ -9,6 +9,7 @@ use crate::{
     sync::Arc,
     util::{
         enum_with_properties,
+        variant_names,
         SourceLoc,
         Utf8DecodeError,
     },
@@ -39,6 +40,7 @@ impl CodedError for LexerError {
 }
 
 enum_with_properties! {
+    #[variant_names]
     #[derive(Clone, Debug)]
     pub enum LexerErrorKind {
         // == Fatals
