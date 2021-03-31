@@ -28,8 +28,6 @@ pub struct FileTokens {
     path: Option<Arc<Path>>,
     file_id: FileId,
 }
-// The stack should always contain at least one token (EOF).
-#[allow(clippy::len_without_is_empty)]
 impl FileTokens {
     pub fn new(file_id: FileId, path: Option<Arc<Path>>) -> Self {
         FileTokens {
@@ -76,10 +74,6 @@ impl FileTokens {
         self.append(error_token);
     }
 
-    pub fn len(&self) -> usize {
-        self.tokens.len()
-    }
-
     pub fn file_id(&self) -> FileId {
         self.file_id
     }
@@ -107,15 +101,17 @@ impl FileTokens {
         }
     }
 }
-impl std::ops::Index<usize> for FileTokens {
-    type Output = Token;
 
-    fn index(&self, index: usize) -> &Token {
-        &self.tokens[index]
+impl std::ops::Deref for FileTokens {
+    type Target = [Token];
+
+    fn deref(&self) -> &Self::Target {
+        self.tokens.as_slice()
     }
 }
-impl std::ops::IndexMut<usize> for FileTokens {
-    fn index_mut(&mut self, index: usize) -> &mut Token {
-        &mut self.tokens[index]
+
+impl std::ops::DerefMut for FileTokens {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.tokens.as_mut_slice()
     }
 }
