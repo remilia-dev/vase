@@ -1,7 +1,5 @@
 // Copyright 2021. remilia-dev
 // This source code is licensed under GPLv3 or any later version.
-use std::marker::PhantomData;
-
 use crate::{
     c::{
         traveler::{
@@ -36,23 +34,21 @@ use crate::{
 type Error = crate::c::traveler::TravelerErrorKind;
 
 pub struct Traveler<'a, E: ErrorReceiver<TravelerError>> {
-    pub(super) env: Arc<CompileEnv>,
-    pub(super) frames: FrameStack,
+    pub(super) env: &'a CompileEnv,
+    pub(super) frames: FrameStack<'a>,
     str_builder: StringBuilder,
     errors: E,
-    _lifetime: PhantomData<&'a ()>,
 }
 
 impl<'a, E: ErrorReceiver<TravelerError>> Traveler<'a, E> {
-    pub fn new(env: Arc<CompileEnv>, errors: E) -> Self {
-        let frames = FrameStack::new(env.clone());
+    pub fn new(env: &'a CompileEnv, errors: E) -> Self {
+        let frames = FrameStack::new(&env);
         // OPTIMIZATION: A different hasher may be more performant
         Traveler {
             env,
             frames,
             str_builder: StringBuilder::new(),
             errors,
-            _lifetime: PhantomData,
         }
     }
 

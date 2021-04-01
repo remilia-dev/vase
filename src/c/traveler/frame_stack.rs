@@ -38,8 +38,8 @@ type Receiver<'a> = &'a mut dyn ErrorReceiver<TravelerError>;
 ///
 /// This includes reading tokens from macros and includes. It is important to note
 /// that FrameStack *never* handles preprocessor instructions (CTraveler does).
-pub(super) struct FrameStack {
-    env: Arc<CompileEnv>,
+pub(super) struct FrameStack<'a> {
+    env: &'a CompileEnv,
     /// A map from file ids to the token stacks. Token stacks are loaded into here as needed.
     file_refs: HashMap<FileId, Arc<FileTokens>>,
     /// A vec-deque of frames. The frame that is currently being worked on will always be at index 0.
@@ -62,9 +62,9 @@ pub(super) struct FrameStack {
     pub(super) index: u32,
 }
 
-impl FrameStack {
+impl<'a> FrameStack<'a> {
     /// Creates a new frame stack from the given compile environment.
-    pub fn new(env: Arc<CompileEnv>) -> Self {
+    pub fn new(env: &'a CompileEnv) -> Self {
         // OPTIMIZATION: A different hasher may be more performant
         FrameStack {
             env,
@@ -276,7 +276,7 @@ impl FrameStack {
         self.dependencies.push(file_id);
         let (file_id, length) = match self.file_refs.get(&file_id) {
             Some(file) => (file_id, file.len()),
-            None => match self.env.file_id_to_tokens().get_arc(file_id) {
+            None => match self.env.file_id_to_tokens.get_arc(file_id) {
                 Some(tokens) => {
                     let length = tokens.len();
                     self.file_refs.insert(file_id, tokens);
@@ -316,7 +316,7 @@ impl FrameStack {
 }
 
 // Macro Utilities
-impl FrameStack {
+impl<'a> FrameStack<'a> {
     /// Returns whether the given macro unique-id has been defined.
     pub fn has_macro(&self, macro_id: usize) -> bool {
         self.macros.contains_key(&macro_id)
