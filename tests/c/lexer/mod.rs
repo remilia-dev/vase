@@ -9,7 +9,6 @@ use std::path::Path;
 use vase::{
     c::{
         CompileEnv,
-        CompileSettings,
         Lexer,
         TokenKind,
     },
@@ -20,11 +19,7 @@ use vase::{
     },
 };
 
-fn new_env() -> Arc<CompileEnv> {
-    Arc::new(CompileEnv::new(CompileSettings::default()))
-}
-
-fn run_test(env: Arc<CompileEnv>, source: &str, expected: &[TokenKind], allow_includes: bool) {
+fn run_test(env: &CompileEnv, source: &str, expected: &[TokenKind], allow_includes: bool) {
     let callback = &|_, _: &CachedString, _: &Option<Arc<Path>>| -> Option<FileId> {
         assert!(
             allow_includes,
@@ -42,7 +37,7 @@ fn run_test(env: Arc<CompileEnv>, source: &str, expected: &[TokenKind], allow_in
 
 #[test]
 fn escape_new_line_adds_to_token_length() {
-    let env = new_env();
+    let env = CompileEnv::default();
     let callback = |_, _: &CachedString, _: &Option<Arc<Path>>| panic!("No includes should occur!");
     let mut lexer = Lexer::new(&env, callback);
     let tokens = lexer.lex_bytes(0.into(), "+\\\n=\\\n+=+=\\\n".as_bytes());

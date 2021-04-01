@@ -1,18 +1,18 @@
 // Copyright 2021. remilia-dev
 // This source code is licensed under GPLv3 or any later version.
-use vase::c::TokenKind::*;
-
-use super::{
-    new_env,
-    run_test,
+use vase::c::{
+    CompileEnv,
+    TokenKind::*,
 };
+
+use super::run_test;
 
 #[test]
 fn preprocessor_ifdef_works() {
-    let env = new_env();
+    let env = CompileEnv::default();
     let cache = env.cache();
     run_test(
-        env.clone(),
+        &env,
         &[r#"
         #define DEFINED
 
@@ -41,10 +41,10 @@ fn preprocessor_ifdef_works() {
 
 #[test]
 fn preprocessor_else_works() {
-    let env = new_env();
+    let env = CompileEnv::default();
     let cache = env.cache();
     run_test(
-        env.clone(),
+        &env,
         &[r#"
         #define DEFINED
 
@@ -88,10 +88,10 @@ fn preprocessor_else_works() {
 
 #[test]
 fn preprocessor_if_conditions_work() {
-    let env = new_env();
+    let env = CompileEnv::default();
     let cache = env.cache();
     run_test(
-        env.clone(),
+        &env,
         &[r#"
         #if 0
             IsFalse
@@ -136,10 +136,10 @@ fn preprocessor_if_conditions_work() {
 
 #[test]
 fn preprocessor_if_char_literals_work() {
-    let env = new_env();
+    let env = CompileEnv::default();
     let cache = env.cache();
     run_test(
-        env.clone(),
+        &env,
         &[r#"
         #if '\0' || '\00' || '\000'
             IsFalse

@@ -10,7 +10,6 @@ use std::path::Path;
 use vase::{
     c::{
         CompileEnv,
-        CompileSettings,
         Lexer,
         TokenKind,
         Traveler,
@@ -22,11 +21,7 @@ use vase::{
     util::CachedString,
 };
 
-fn new_env() -> Arc<CompileEnv> {
-    Arc::new(CompileEnv::new(CompileSettings::default()))
-}
-
-fn run_test(env: Arc<CompileEnv>, sources: &[&str], expected: &[TokenKind]) {
+fn run_test(env: &CompileEnv, sources: &[&str], expected: &[TokenKind]) {
     if sources.len() > 2 {
         panic!(
             "This test helper can only support up to two sources. All includes go to the second source."
@@ -41,7 +36,7 @@ fn run_test(env: Arc<CompileEnv>, sources: &[&str], expected: &[TokenKind]) {
         env.file_id_to_tokens().push(Arc::new(tokens));
     }
 
-    let mut traveler = Traveler::new(env.clone(), &|err: TravelerError| {
+    let mut traveler = Traveler::new(&env, &|err: TravelerError| {
         panic!(
             "An error should not have occured: {:?}\n{}",
             &err,

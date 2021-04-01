@@ -3,23 +3,21 @@
 use indoc::indoc;
 use vase::{
     c::{
+        CompileEnv,
         IncludeType::*,
         TokenKind::*,
     },
     sync::Arc,
 };
 
-use super::{
-    new_env,
-    run_test,
-};
+use super::run_test;
 
 #[test]
 fn preprocessor_tokens_lex_properly() {
-    let env = new_env();
+    let env = CompileEnv::default();
     let cache = env.cache();
     run_test(
-        env.clone(),
+        &env,
         indoc! {r#"
         #define
         // Ensure many spaces can be used

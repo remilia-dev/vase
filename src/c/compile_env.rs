@@ -125,6 +125,12 @@ impl CompileEnv {
     }
 }
 
+impl Default for CompileEnv {
+    fn default() -> Self {
+        Self::new(CompileSettings::default())
+    }
+}
+
 fn update_cache_maps(env: &mut CompileEnv) {
     for &keyword in &Keyword::VARIANTS {
         if keyword.should_add(&env.settings) {

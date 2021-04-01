@@ -2,21 +2,19 @@
 // This source code is licensed under GPLv3 or any later version.
 use vase::{
     c::{
+        CompileEnv,
         StringEnc,
         TokenKind::*,
     },
     sync::Arc,
 };
 
-use super::{
-    new_env,
-    run_test,
-};
+use super::run_test;
 
 #[test]
 fn can_join_symbols() {
     run_test(
-        new_env(),
+        &CompileEnv::default(),
         &[r#"
         #define JOIN(A, B) A ## B
         JOIN(<,:)
@@ -84,7 +82,7 @@ fn can_join_symbols() {
 fn can_join_str_prefix() {
     let expected: Arc<Box<str>> = Arc::new(Box::from("test"));
     run_test(
-        new_env(),
+        &CompileEnv::default(),
         &[r#"
         #define TEST "test"
         #define JOIN(A, B) A ## B
@@ -131,10 +129,10 @@ fn can_join_str_prefix() {
 
 #[test]
 fn can_join_numbers() {
-    let env = new_env();
+    let env = CompileEnv::default();
     let cache = env.cache();
     run_test(
-        env.clone(),
+        &env,
         &[r#"
         #define JOIN(A, B) A ## B
         JOIN(0x, FF)
@@ -167,10 +165,10 @@ fn can_join_numbers() {
 
 #[test]
 fn can_join_identifiers() {
-    let env = new_env();
+    let env = CompileEnv::default();
     let cache = env.cache();
     run_test(
-        env.clone(),
+        &env,
         &[r#"
         #define JOIN(A, B) A ## B
         JOIN(A, B)
@@ -199,10 +197,10 @@ fn can_join_identifiers() {
 
 #[test]
 fn can_join_empty_func_macro() {
-    let env = new_env();
+    let env = CompileEnv::default();
     let cache = env.cache();
     run_test(
-        env.clone(),
+        &env,
         &[r#"
         #define JOIN(A, B) A ## B
         JOIN(, EmptyBefore)

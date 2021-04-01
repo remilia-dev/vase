@@ -1,21 +1,19 @@
 // Copyright 2021. remilia-dev
 // This source code is licensed under GPLv3 or any later version.
 use vase::c::{
+    CompileEnv,
     Keyword,
     TokenKind::*,
 };
 
-use super::{
-    new_env,
-    run_test,
-};
+use super::run_test;
 
 #[test]
 fn object_macros_work() {
-    let env = new_env();
+    let env = CompileEnv::default();
     let cache = env.cache();
     run_test(
-        env.clone(),
+        &env,
         &[r#"
         #define EMPTY // Empty object macro shouldn't produce tokens
         EMPTY
@@ -49,10 +47,10 @@ fn object_macros_work() {
 
 #[test]
 fn function_macro_var_args_work() {
-    let env = new_env();
+    let env = CompileEnv::default();
     let cache = env.cache();
     run_test(
-        env.clone(),
+        &env,
         &[r#"
         #define NO_ARG(...) __VA_ARGS__
         NO_ARG(NA1, NA2)
@@ -84,10 +82,10 @@ fn function_macro_var_args_work() {
 
 #[test]
 fn partial_function_macro_invocations_work() {
-    let env = new_env();
+    let env = CompileEnv::default();
     let cache = env.cache();
     run_test(
-        env.clone(),
+        &env,
         &[r#"
         #define X() Y
         #define Y X(
@@ -104,10 +102,10 @@ fn partial_function_macro_invocations_work() {
 
 #[test]
 fn indirect_function_invocations_work() {
-    let env = new_env();
+    let env = CompileEnv::default();
     let cache = env.cache();
     run_test(
-        env.clone(),
+        &env,
         &[r#"
         #define EMPTY
         #define EMPTY_INDIRECT EMPTY
@@ -125,10 +123,10 @@ fn indirect_function_invocations_work() {
 
 #[test]
 fn can_undef_macros() {
-    let env = new_env();
+    let env = CompileEnv::default();
     let cache = env.cache();
     run_test(
-        env.clone(),
+        &env,
         &[r#"
         #define OBJECT DEFINED
         #undef OBJECT

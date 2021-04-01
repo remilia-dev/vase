@@ -1,17 +1,17 @@
 // Copyright 2021. remilia-dev
 // This source code is licensed under GPLv3 or any later version.
 use indoc::indoc;
-use vase::c::TokenKind::*;
-
-use super::{
-    new_env,
-    run_test,
+use vase::c::{
+    CompileEnv,
+    TokenKind::*,
 };
+
+use super::run_test;
 
 #[test]
 fn test_symbol_lexing() {
     run_test(
-        new_env(),
+        &CompileEnv::default(),
         indoc! {r#"
         [
         <:

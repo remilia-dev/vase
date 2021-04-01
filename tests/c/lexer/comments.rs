@@ -1,17 +1,17 @@
 // Copyright 2021. remilia-dev
 // This source code is licensed under GPLv3 or any later version.
 use indoc::indoc;
-use vase::c::TokenKind::*;
-
-use super::{
-    new_env,
-    run_test,
+use vase::c::{
+    CompileEnv,
+    TokenKind::*,
 };
+
+use super::run_test;
 
 #[test]
 fn comments_lex_properly() {
     run_test(
-        new_env(),
+        &CompileEnv::default(),
         indoc! {r#"
         // NOTE: I used a minus token (+) to separate comments
 
