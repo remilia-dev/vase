@@ -1,9 +1,6 @@
 // Copyright 2021. remilia-dev
 // This source code is licensed under GPLv3 or any later version.
-use std::{
-    fs::File,
-    path::Path,
-};
+use std::path::Path;
 
 use unicode_normalization::UnicodeNormalization;
 
@@ -56,6 +53,7 @@ impl<'a, OnInclude: IncludeCallback> Lexer<'a, OnInclude> {
     pub fn lex_file(&mut self, file_id: FileId, file_path: Arc<Path>) -> FileTokens {
         // The scope is here to free file resources early.
         {
+            use std::fs::File;
             let file = match File::open(&file_path) {
                 Err(error) => {
                     return FileTokens::new_error(file_id, Some(file_path), error);

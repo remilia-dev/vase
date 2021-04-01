@@ -16,6 +16,8 @@ impl CompileSettings {}
 
 impl Default for CompileSettings {
     fn default() -> Self {
+        // The variable is mutated only in some configurations.
+        #[allow(unused_mut)]
         let mut res = CompileSettings {
             version: LangVersion::C89,
             system_includes: Vec::new(),
