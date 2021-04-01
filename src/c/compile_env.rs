@@ -38,7 +38,7 @@ pub struct CompileEnv {
     cached_to_keywords: HashMap<CachedString, Keyword>,
     cached_to_preprocessor: HashMap<CachedString, TokenKind>,
     cached_to_str_prefix: HashMap<CachedString, StringEnc>,
-    file_id_to_tokens: OnceArray<FileTokens>,
+    pub file_id_to_tokens: OnceArray<FileTokens>,
 }
 impl CompileEnv {
     pub fn new(settings: CompileSettings) -> CompileEnv {
@@ -76,9 +76,6 @@ impl CompileEnv {
     }
     pub fn cached_to_str_prefix(&self) -> &HashMap<CachedString, StringEnc> {
         &self.cached_to_str_prefix
-    }
-    pub fn file_id_to_tokens(&self) -> &OnceArray<FileTokens> {
-        &self.file_id_to_tokens
     }
 
     pub fn find_include(

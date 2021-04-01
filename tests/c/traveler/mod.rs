@@ -33,7 +33,7 @@ fn run_test(env: &CompileEnv, sources: &[&str], expected: &[TokenKind]) {
     for (i, source) in sources.iter().enumerate() {
         let file_id = NonMaxU32::new(i as u32).unwrap();
         let tokens = lexer.lex_bytes(file_id, source.as_bytes());
-        env.file_id_to_tokens().push(Arc::new(tokens));
+        env.file_id_to_tokens.push(Arc::new(tokens));
     }
 
     let mut traveler = Traveler::new(&env, &|err: TravelerError| {
@@ -44,7 +44,7 @@ fn run_test(env: &CompileEnv, sources: &[&str], expected: &[TokenKind]) {
         );
     });
     traveler
-        .load_start(env.file_id_to_tokens().get_arc(0.into()).unwrap())
+        .load_start(env.file_id_to_tokens.get_arc(0.into()).unwrap())
         .unwrap();
 
     for expected_token in expected.iter() {
