@@ -371,13 +371,13 @@ impl<'a, E: ErrorReceiver<TravelerError>> Traveler<'a, E> {
 
     fn handle_include(&mut self, _include_next: bool) -> MayUnwind<()> {
         // We use self.move_forward to allow for macros to be used.
-        let inc_file = match *self.move_forward()?.kind() {
+        let (inc_file, inc_type, path) = match *self.move_forward()?.kind() {
             IncludePath { ref path, inc_type } => {
                 let path = path.clone();
                 if let Some(inc_file) = self.frames.get_include_ref(&path) {
-                    inc_file
+                    (inc_file, inc_type, path.clone())
                 } else {
-                    let error = Error::IncludeNotFound(inc_type, path);
+                    let error = Error::IncludeNotFound(None, inc_type, path);
                     let result = self.report_error(error);
                     self.skip_past_preprocessor();
                     return result;
@@ -405,7 +405,7 @@ impl<'a, E: ErrorReceiver<TravelerError>> Traveler<'a, E> {
         }
 
         if self.frames.push_include(inc_file).is_err() {
-            self.report_error(Error::MissingIncludeId(inc_file))
+            self.report_error(Error::IncludeNotFound(Some(inc_file), inc_type, path))
         } else {
             Ok(())
         }

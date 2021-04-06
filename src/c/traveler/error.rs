@@ -64,11 +64,11 @@ enum_with_properties! {
         Unimplemented(&'static str),
         #[values(Internal, 901)]
         Unreachable(&'static str),
-        #[values(Internal, 902)]
-        MissingIncludeId(FileId),
         // == Fatals
         #[values(Fatal, 800)]
         ErrorPreprocessor(Option<Arc<Box<str>>>),
+        #[values(Fatal, 850)]
+        IncludeNotFound(Option<FileId>, IncludeType, CachedString),
         // == Errors
         #[values(Error, 500)]
         IfDefExpectedId(Token, Token),
@@ -112,8 +112,6 @@ enum_with_properties! {
         IncludeExpectedPath(Token),
         #[values(Error, 551)]
         IncludeExtraTokens,
-        #[values(Error, 552)]
-        IncludeNotFound(IncludeType, CachedString),
         #[values(Error, 560)]
         FuncInvokeMissingArgs(usize),
         #[values(Error, 561)]
@@ -211,14 +209,14 @@ impl TravelerErrorKind {
                 "Unreachable condition: {}. This is an internal error.",
                 thing
             ),
-            MissingIncludeId(file_id) => format!(
-                "The file with id {} was missing. This is an internal error that shouldn't occur.",
-                file_id
-            ),
             // == Fatals
             ErrorPreprocessor(ref message) => format!(
                 "#error: {}",
                 message.as_ref().map_or("", |message| &*message)
+            ),
+            IncludeNotFound(_,kind, ref path) => format!(
+                "A {} of the path {} could not be found.",
+                kind, path
             ),
             // == Errors
             IfDefExpectedId(ref ifdef, ref bad_token) => match *bad_token.kind() {
@@ -394,10 +392,6 @@ impl TravelerErrorKind {
             IncludeExtraTokens => {
                 "Only a single include path should follow an include directive.".to_owned()
             },
-            IncludeNotFound(kind, ref path) => format!(
-                "A {} of the path {} could not be found.",
-                kind, path
-            ),
             FuncInvokeMissingArgs(count) => format!(
                 "This func-macro invocation is missing {} parameters.",
                 count
