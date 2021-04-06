@@ -65,17 +65,21 @@ impl CompileEnv {
     pub fn threads(&self) -> &Arc<ThreadPool> {
         &self.threads
     }
+
     pub fn cache(&self) -> &StringCache {
         &self.cache
     }
-    pub fn cached_to_keywords(&self) -> &HashMap<CachedString, Keyword> {
-        &self.cached_to_keywords
+
+    pub fn get_keyword(&self, v: &CachedString) -> Option<Keyword> {
+        self.cached_to_keywords.get(v).cloned()
     }
-    pub fn cached_to_preprocessor(&self) -> &HashMap<CachedString, TokenKind> {
-        &self.cached_to_preprocessor
+
+    pub fn get_preprocessor(&self, v: &CachedString) -> Option<TokenKind> {
+        self.cached_to_preprocessor.get(v).cloned()
     }
-    pub fn cached_to_str_prefix(&self) -> &HashMap<CachedString, StringEnc> {
-        &self.cached_to_str_prefix
+
+    pub fn get_string_prefix(&self, v: &CachedString) -> Option<StringEnc> {
+        self.cached_to_str_prefix.get(v).cloned()
     }
 
     pub fn find_include(

@@ -326,8 +326,8 @@ impl<'a, OnInclude: IncludeCallback> LexerState<'a, OnInclude> {
         };
 
         let pre_id = self.read_cached_identifier(first_char);
-        let pre_type = match self.env.cached_to_preprocessor().get(&pre_id) {
-            Some(pre_type) => pre_type.clone(),
+        let pre_type = match self.env.get_preprocessor(&pre_id) {
+            Some(pre_type) => pre_type,
             None => {
                 self.mode = CLexerMode::Preprocessor;
                 return self.add_token(TokenKind::PreUnknown(pre_id));
@@ -487,11 +487,9 @@ impl<'a, OnInclude: IncludeCallback> LexerState<'a, OnInclude> {
     fn lex_identifier(&mut self, first_char: char) {
         let cached = self.read_cached_identifier(first_char);
 
-        if let Some(keyword) = self.env.cached_to_keywords().get(&cached) {
-            return self.add_token(TokenKind::Keyword(*keyword, cached.uniq_id()));
-        }
-
-        if let Some(str_type) = self.env.cached_to_str_prefix().get(&cached).cloned() {
+        if let Some(keyword) = self.env.get_keyword(&cached) {
+            return self.add_token(TokenKind::Keyword(keyword, cached.uniq_id()));
+        } else if let Some(str_type) = self.env.get_string_prefix(&cached) {
             let front_char = self.reader.front().unwrap_or('\0');
             if front_char == '"' || front_char == '\'' {
                 return self.lex_string(str_type, front_char == '\'');

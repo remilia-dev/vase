@@ -502,9 +502,9 @@ impl<'a, E: ErrorReceiver<TravelerError>> Traveler<'a, E> {
                     str_data,
                 },
             ) => {
-                if let Some(str_type) = self.env.cached_to_str_prefix().get(id) {
+                if let Some(encoding) = self.env.get_string_prefix(id) {
                     String {
-                        encoding: *str_type,
+                        encoding,
                         is_char: *is_char,
                         has_escapes: *has_escapes,
                         str_data: str_data.clone(),
@@ -519,8 +519,8 @@ impl<'a, E: ErrorReceiver<TravelerError>> Traveler<'a, E> {
             },
             (id1, id2) if id1.is_id_joinable_with(id2) => {
                 let cached = self.join_and_cache(id1.text(), id2.text());
-                if let Some(keyword) = self.env.cached_to_keywords().get(&cached) {
-                    Keyword(*keyword, cached.uniq_id())
+                if let Some(keyword) = self.env.get_keyword(&cached) {
+                    Keyword(keyword, cached.uniq_id())
                 } else {
                     Identifier(cached)
                 }
