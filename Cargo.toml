@@ -12,11 +12,12 @@ publish = false
 default = ["file-reading", "multithreading"]
 file-reading = ["memmap2"]
 multithreading = ["rayon", "thread_local"]
+wasm-bindgen = ["parking_lot/wasm-bindgen"]
 
 [dependencies]
 codespan-reporting = "0.11.0"
 memmap2 = { version = "0.2.0", optional = true }
-parking_lot = "0.11.1"
+parking_lot = { version = "0.11.1", features = ["nightly"] }
 rayon = { version = "1.5", optional = true }
 replace_with = "0.1.7"
 thread_local = { version = "1.1.2", optional = true }
