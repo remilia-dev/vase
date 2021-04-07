@@ -171,13 +171,20 @@ impl<'a, 'b, E: ErrorReceiver<TravelerError>> IfParser<'a, 'b, E> {
     }
 
     fn parse_defined(&mut self, index: TravelIndex) -> MayUnwind<Box<Expr>> {
-        let (head, has_parens) = match self.move_frame_forward() {
-            token if matches!(token.kind(), &LParen) => (self.move_frame_forward(), true),
+        self.move_forward()?;
+        let (head, has_parens) = match self.head() {
+            token if matches!(token.kind(), &LParen) => {
+                self.move_frame_forward();
+                (self.head(), true)
+            },
             token => (token, false),
         };
 
-        let id = match *head.kind() {
-            ref kind if kind.is_definable() => kind.get_definable_id(),
+        let value = match *head.kind() {
+            ref kind if kind.is_definable() => {
+                let id = self.traveler.env.get_definable_id(kind);
+                self.traveler.frames.has_macro(id) as i64
+            },
             RParen if has_parens => {
                 let error = Error::IfDefinedNotDefinable(
                     self.if_token.clone(),
@@ -204,7 +211,7 @@ impl<'a, 'b, E: ErrorReceiver<TravelerError>> IfParser<'a, 'b, E> {
                     self.clone_head(),
                 );
                 self.report_error(error)?;
-                0 // A unique id of 0 will never show up
+                0
             },
         };
 
@@ -220,7 +227,6 @@ impl<'a, 'b, E: ErrorReceiver<TravelerError>> IfParser<'a, 'b, E> {
             _ => {},
         }
 
-        let value = self.traveler.frames.has_macro(id) as i64;
         Ok(Box::new(Number { index, kind: value.into() }.into()))
     }
 

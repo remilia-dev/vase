@@ -10,7 +10,10 @@ use crate::{
         Frame,
         MacroKind,
     },
-    util::FileId,
+    util::{
+        CachedString,
+        FileId,
+    },
 };
 
 /// A snapshot of [Traveler](super::Traveler)'s progress in a token stack.
@@ -21,7 +24,7 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct TravelerState {
     pub(super) frames: VecDeque<Frame>,
-    pub(super) macros: HashMap<usize, MacroKind>,
+    pub(super) macros: HashMap<CachedString, MacroKind>,
     pub(super) dependencies: Vec<FileId>,
     pub(super) index: u32,
     pub(super) should_chain_skip: bool,

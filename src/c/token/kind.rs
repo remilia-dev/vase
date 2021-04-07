@@ -26,7 +26,7 @@ pub enum TokenKind {
     // OPTIMIZATION: Remove the excess Box (See String too). This would involve using some thin-dst type.
     Message(Arc<Box<str>>),
     Identifier(CachedString),
-    Keyword(Keyword, usize),
+    Keyword(Keyword),
     Number(CachedString),
     String {
         encoding: StringEnc,
@@ -338,17 +338,6 @@ impl TokenKind {
     pub fn is_definable(&self) -> bool {
         use TokenKind::*;
         matches!(self, Identifier(..) | Keyword(..))
-    }
-
-    pub fn get_definable_id(&self) -> usize {
-        use TokenKind::*;
-        match *self {
-            Identifier(ref id) => id.uniq_id(),
-            Keyword(_, unique_id) => unique_id,
-            _ => panic!(
-                "get_definable_unique_id should only be used on tokens that are is_definable."
-            ),
-        }
     }
 
     pub fn is_preprocessor(&self) -> bool {

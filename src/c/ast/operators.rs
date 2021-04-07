@@ -93,8 +93,8 @@ impl std::convert::TryFrom<&TokenKind> for PrefixOp {
             Tilde => Self::BitNot,
             Star => Self::Dereference,
             Amp => Self::AddressOf,
-            Keyword(Sizeof, ..) => Self::SizeOf,
-            Keyword(Alignof, ..) => Self::AlignOf,
+            Keyword(Sizeof) => Self::SizeOf,
+            Keyword(Alignof) => Self::AlignOf,
             _ => return Err(()),
         })
     }

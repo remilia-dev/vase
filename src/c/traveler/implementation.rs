@@ -139,7 +139,7 @@ impl<'a, E: ErrorReceiver<TravelerError>> Traveler<'a, E> {
                     unreachable!();
                 },
                 ref token if token.is_definable() => {
-                    let definable_id = token.get_definable_id();
+                    let definable_id = self.env.get_definable_id(token);
                     if let Some(handle) = self.frames.should_handle_macro(definable_id) {
                         self.frames.handle_macro(handle, &mut self.errors)?;
                     } else {
@@ -209,9 +209,11 @@ impl<'a, E: ErrorReceiver<TravelerError>> Traveler<'a, E> {
 
     fn handle_if_def(&mut self, if_def: Token, link: usize) -> MayUnwind<()> {
         let is_ifdef = matches!(if_def.kind(), &PreIfDef { .. });
-        let defined = match *self.move_slightly_forward()?.kind() {
+
+        self.move_slightly_forward()?;
+        let defined = match *self.head().kind() {
             ref token if token.is_definable() => {
-                let macro_id = token.get_definable_id();
+                let macro_id = self.env.get_definable_id(token);
                 self.frames.has_macro(macro_id)
             },
             _ => {
@@ -230,8 +232,9 @@ impl<'a, E: ErrorReceiver<TravelerError>> Traveler<'a, E> {
     }
 
     fn handle_define(&mut self) -> MayUnwind<()> {
-        let macro_id = match *self.move_slightly_forward()?.kind() {
-            ref token if token.is_definable() => token.get_definable_id(),
+        self.move_slightly_forward()?;
+        let id = match *self.head().kind() {
+            ref kind if kind.is_definable() => self.env.get_definable_id(kind).clone(),
             _ => {
                 let error = Error::DefineExpectedId(self.frames.head().clone());
                 let result = self.report_error(error);
@@ -244,23 +247,28 @@ impl<'a, E: ErrorReceiver<TravelerError>> Traveler<'a, E> {
         match *head.kind() {
             PreEnd => {
                 // TODO: Ensure the previous macro was empty (otherwise report warning)
-                self.frames.add_macro(macro_id, MacroKind::Empty);
+                self.frames.add_macro(id, MacroKind::Empty);
                 self.frames.move_forward();
                 Ok(())
             },
-            LParen if !head.whitespace_before() => self.handle_function_macro(macro_id),
-            _ => self.handle_object_macro(macro_id),
+            LParen if !head.whitespace_before() => self.handle_function_macro(id),
+            _ => self.handle_object_macro(id),
         }
     }
 
-    fn handle_function_macro(&mut self, macro_id: usize) -> MayUnwind<()> {
+    fn handle_function_macro(&mut self, id: CachedString) -> MayUnwind<()> {
         let mut params = Vec::new();
         let mut var_arg = None;
         loop {
-            match *self.move_slightly_forward()?.kind() {
-                ref token if token.is_definable() => params.push(token.get_definable_id()),
+            self.move_slightly_forward()?;
+            match *self.head().kind() {
+                ref token if token.is_definable() => {
+                    let id = self.env.get_definable_id(token);
+                    params.push(id.clone());
+                },
                 DotDotDot => {
-                    var_arg = Some(self.env.cache().get_or_cache("__VA_ARGS__").uniq_id());
+                    // OPTIMIZATION: The cached value should always be the same.
+                    var_arg = Some(self.env.cache().get_or_cache("__VA_ARGS__"));
                     self.frames.move_forward();
                     break;
                 },
@@ -314,7 +322,7 @@ impl<'a, E: ErrorReceiver<TravelerError>> Traveler<'a, E> {
 
         let (file_id, index) = self.frames.get_file_index();
         let length = self.skip_past_preprocessor();
-        self.frames.add_macro(macro_id, MacroKind::FuncMacro {
+        self.frames.add_macro(id, MacroKind::FuncMacro {
             file_id,
             index,
             end: index + length,
@@ -325,14 +333,14 @@ impl<'a, E: ErrorReceiver<TravelerError>> Traveler<'a, E> {
         Ok(())
     }
 
-    fn handle_object_macro(&mut self, macro_id: usize) -> MayUnwind<()> {
+    fn handle_object_macro(&mut self, id: CachedString) -> MayUnwind<()> {
         if matches!(
             self.frames.preview_next_kind(false),
             Some(&TokenKind::PreEnd)
         ) {
             // TODO: Ensure the previous macro is the same (otherwise report warning)
             let token = self.frames.head().clone();
-            self.frames.add_macro(macro_id, MacroKind::SingleToken { token });
+            self.frames.add_macro(id, MacroKind::SingleToken { token });
             // Move onto the PreEnd token
             self.frames.move_forward();
             // Move past the PreEnd token
@@ -341,7 +349,7 @@ impl<'a, E: ErrorReceiver<TravelerError>> Traveler<'a, E> {
             let (file_id, index) = self.frames.get_file_index();
             let length = self.skip_past_preprocessor();
             // TODO: Ensure the previous macro was the same (otherwise report warning)
-            self.frames.add_macro(macro_id, MacroKind::ObjectMacro {
+            self.frames.add_macro(id, MacroKind::ObjectMacro {
                 index,
                 file_id,
                 end: index + length,
@@ -352,10 +360,16 @@ impl<'a, E: ErrorReceiver<TravelerError>> Traveler<'a, E> {
     }
 
     fn handle_undef(&mut self) -> MayUnwind<()> {
-        match *self.move_slightly_forward()?.kind() {
-            ref token if token.is_definable() => {
-                let macro_id = token.get_definable_id();
-                self.frames.remove_macro(macro_id);
+        self.move_slightly_forward()?;
+        match *self.head().kind() {
+            Identifier(ref id) => {
+                let id = id.clone();
+                self.frames.remove_macro(&id)
+            },
+            Keyword(keyword) => {
+                if let Some(id) = self.env.get_keyword_string(keyword) {
+                    self.frames.remove_macro(id);
+                }
             },
             _ => {
                 let error = Error::UndefExpectedId(self.frames.head().clone());
@@ -520,7 +534,7 @@ impl<'a, E: ErrorReceiver<TravelerError>> Traveler<'a, E> {
             (id1, id2) if id1.is_id_joinable_with(id2) => {
                 let cached = self.join_and_cache(id1.text(), id2.text());
                 if let Some(keyword) = self.env.get_keyword(&cached) {
-                    Keyword(keyword, cached.uniq_id())
+                    Keyword(keyword)
                 } else {
                     Identifier(cached)
                 }

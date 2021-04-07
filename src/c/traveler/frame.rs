@@ -8,7 +8,10 @@ use crate::{
         Token,
     },
     sync::Arc,
-    util::FileId,
+    util::{
+        CachedString,
+        FileId,
+    },
 };
 
 #[derive(Clone, Debug)]
@@ -32,10 +35,8 @@ pub(super) enum Frame {
     SingleToken {
         /// The token this frame represents.
         token: Token,
-        /// The unique id of the object macro this is from.
-        ///
-        /// If this value is usize::MAX, then this is actually from a token-join operator.
-        macro_id: usize,
+        /// The id of the macro if this frame is from a macro.
+        id: Option<CachedString>,
     },
     /// A frame that represents an object macro with 2 tokens or more.
     /// # 1-Token and 0-Token Object Macros
@@ -50,8 +51,8 @@ pub(super) enum Frame {
         ///
         /// This will always exclude the [PreEnd](crate::c::CTokenKind::PreEnd) token.
         end: usize,
-        /// The unique id of the object macro this is from.
-        macro_id: usize,
+        /// The id of the macro.
+        id: CachedString,
     },
     /// A frame that represents a function macro.
     FuncMacro {
@@ -66,8 +67,8 @@ pub(super) enum Frame {
         //file_id: FileId,
         /// The current index of token we are at.
         index: usize,
-        /// The unique id of the function macro this is from.
-        macro_id: usize,
+        /// The id of the macro.
+        id: CachedString,
     },
     /// A frame that is used to collect the tokens for a function macro.
     TokenCollector {
@@ -80,7 +81,7 @@ pub(super) enum Frame {
         /// This will always *include* the [PreEnd](crate::c::CTokenKind::PreEnd) token.
         end: usize,
         /// A map from a unique id to the tokens the parameter makes up.
-        params: HashMap<usize, Vec<Token>>,
+        params: HashMap<CachedString, Vec<Token>>,
     },
     /// A frame that represents a token collector's parameter.
     ///
@@ -91,7 +92,7 @@ pub(super) enum Frame {
         /// The index this frame would be complete at.
         end: usize,
         /// The id of the parameter to get tokens from.
-        param_id: usize,
+        param_id: CachedString,
     },
 }
 
@@ -129,15 +130,15 @@ impl Frame {
         }
     }
 
-    pub fn has_parameter(&self, param_id: usize) -> Option<MacroHandle> {
+    pub fn has_parameter(&self, id: &CachedString) -> Option<MacroHandle> {
         match *self {
             Frame::TokenCollector { ref params, .. } => {
-                let param_vec = params.get(&param_id)?;
+                let param_vec = params.get(id)?;
                 Some(if param_vec.is_empty() {
                     MacroHandle::Empty
                 } else {
                     MacroHandle::Simple(Frame::TokenCollectorParameter {
-                        param_id,
+                        param_id: id.clone(),
                         index: 0,
                         end: param_vec.len(),
                     })
@@ -147,12 +148,12 @@ impl Frame {
         }
     }
 
-    pub fn stringify(&self, param_id: usize) -> Option<String> {
+    pub fn stringify(&self, id: &CachedString) -> Option<String> {
         use std::fmt::Write;
         match *self {
             Frame::TokenCollector { ref params, .. } => {
                 let mut buffer = String::new();
-                let params = params.get(&param_id)?;
+                let params = params.get(id)?;
                 for (i, param) in params.iter().enumerate() {
                     if i != 0 && param.whitespace_before() {
                         buffer.push(' ');

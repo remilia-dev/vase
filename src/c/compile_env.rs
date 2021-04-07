@@ -35,7 +35,9 @@ pub struct CompileEnv {
     #[cfg(feature = "multithreading")]
     threads: Arc<ThreadPool>,
     cache: StringCache,
+    // OPTIMIZATION: A two-way map may be better than two separate maps.
     cached_to_keywords: HashMap<CachedString, Keyword>,
+    keyword_to_cached: HashMap<Keyword, CachedString>,
     cached_to_preprocessor: HashMap<CachedString, TokenKind>,
     cached_to_str_prefix: HashMap<CachedString, StringEnc>,
     pub file_id_to_tokens: OnceArray<FileTokens>,
@@ -49,6 +51,7 @@ impl CompileEnv {
             threads: Arc::new(ThreadPoolBuilder::new().build().unwrap()),
             cache: StringCache::new(),
             cached_to_keywords: HashMap::new(),
+            keyword_to_cached: HashMap::new(),
             cached_to_preprocessor: HashMap::new(),
             cached_to_str_prefix: HashMap::new(),
             file_id_to_tokens: OnceArray::default(),
@@ -72,6 +75,21 @@ impl CompileEnv {
 
     pub fn get_keyword(&self, v: &CachedString) -> Option<Keyword> {
         self.cached_to_keywords.get(v).cloned()
+    }
+
+    pub fn get_keyword_string(&self, v: Keyword) -> Option<&CachedString> {
+        self.keyword_to_cached.get(&v)
+    }
+
+    pub fn get_definable_id<'a>(&'a self, v: &'a TokenKind) -> &'a CachedString {
+        match *v {
+            TokenKind::Identifier(ref id) => id,
+            TokenKind::Keyword(keyword) => &self.keyword_to_cached[&keyword],
+            _ => panic!(
+                "Non-definable token does not have a definable id: {:?}",
+                v
+            ),
+        }
     }
 
     pub fn get_preprocessor(&self, v: &CachedString) -> Option<TokenKind> {
@@ -136,7 +154,8 @@ fn update_cache_maps(env: &mut CompileEnv) {
     for &keyword in &Keyword::VARIANTS {
         if keyword.should_add(&env.settings) {
             let cached = env.cache.get_or_cache(keyword.text());
-            env.cached_to_keywords.insert(cached, keyword);
+            env.cached_to_keywords.insert(cached.clone(), keyword);
+            env.keyword_to_cached.insert(keyword, cached);
         }
     }
 

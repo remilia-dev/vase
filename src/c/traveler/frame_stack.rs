@@ -49,7 +49,7 @@ pub(super) struct FrameStack<'a> {
     /// A map from a macro's unique id to the kind of macro it is.
     ///
     /// A macro's unique id is the uniq_id() of its identifier.
-    macros: HashMap<usize, MacroKind>,
+    macros: HashMap<CachedString, MacroKind>,
     /// Whether CTraveler should skip-ahead on PreElseIf/PreElse tokens.
     ///
     /// This is set to true every time the stack is moved. The only way it is false
@@ -131,9 +131,9 @@ impl<'a> FrameStack<'a> {
             | Frame::TokenCollector { file_id, index, .. } => &self.file_refs[&file_id][index],
             Frame::SingleToken { ref token, .. } => token,
             Frame::FuncMacro { index, ref tokens, .. } => &tokens[index],
-            Frame::TokenCollectorParameter { index, param_id, .. } => {
+            Frame::TokenCollectorParameter { index, ref param_id, .. } => {
                 if let Frame::TokenCollector { ref params, .. } = self.frames[1] {
-                    &params[&param_id][index]
+                    &params[param_id][index]
                 } else {
                     panic!(
                         "TokenCollectorParameter frame should have been preceded by TokenCollector frame."
@@ -187,11 +187,11 @@ impl<'a> FrameStack<'a> {
                     // parameter substitution.
                     return None;
                 },
-                Frame::TokenCollectorParameter { param_id, index, end, .. } => {
+                Frame::TokenCollectorParameter { ref param_id, index, end, .. } => {
                     return if index + 1 >= end {
                         None
                     } else if let Frame::TokenCollector { ref params, .. } = self.frames[i + 1] {
-                        Some(params[&param_id][index + 1].kind())
+                        Some(params[param_id][index + 1].kind())
                     } else {
                         panic!(
                             "TokenCollectorParameter frame should have been preceded by TokenCollector frame."
@@ -298,7 +298,7 @@ impl<'a> FrameStack<'a> {
     ///
     /// This method should only be used for token-joiner and stringification operations.
     pub fn push_token(&mut self, token: Token) {
-        let frame = Frame::SingleToken { macro_id: usize::MAX, token };
+        let frame = Frame::SingleToken { id: None, token };
         self.frames.push_front(frame);
     }
     /// Skips the file frame to the given link. You can also set whether the skip should
@@ -318,17 +318,17 @@ impl<'a> FrameStack<'a> {
 // Macro Utilities
 impl<'a> FrameStack<'a> {
     /// Returns whether the given macro unique-id has been defined.
-    pub fn has_macro(&self, macro_id: usize) -> bool {
-        self.macros.contains_key(&macro_id)
+    pub fn has_macro(&self, id: &CachedString) -> bool {
+        self.macros.contains_key(id)
     }
     /// Sets that a unique id represents the given macro.
     /// This does not check if any previous macros were the same.
-    pub fn add_macro(&mut self, macro_id: usize, mcr: MacroKind) {
-        self.macros.insert(macro_id, mcr);
+    pub fn add_macro(&mut self, id: CachedString, mcr: MacroKind) {
+        self.macros.insert(id, mcr);
     }
     /// Removes the given macro unique-id as being defined.
-    pub fn remove_macro(&mut self, macro_id: usize) {
-        self.macros.remove(&macro_id);
+    pub fn remove_macro(&mut self, id: &CachedString) {
+        self.macros.remove(id);
     }
     /// Checks if the given unique id should be handled as a macro.
     /// This will return None should any of the following occur:
@@ -336,27 +336,30 @@ impl<'a> FrameStack<'a> {
     /// * The macro is already in-use in the frame stack.
     ///
     /// Should some value be returned, the value contains the strategy [FrameStack::handle_macro] should use.
-    pub fn should_handle_macro(&self, macro_id: usize) -> Option<MacroHandle> {
-        let mcr = self.macros.get(&macro_id)?;
+    pub fn should_handle_macro(&self, id: &CachedString) -> Option<MacroHandle> {
+        let mcr = self.macros.get(id)?;
 
-        if self.in_macro(macro_id) {
+        if self.in_macro(id) {
             return None;
         }
 
         match *mcr {
             MacroKind::Empty => Some(MacroHandle::Empty),
             MacroKind::SingleToken { ref token } => {
-                let frame = Frame::SingleToken { token: token.clone(), macro_id };
+                let frame = Frame::SingleToken {
+                    token: token.clone(),
+                    id: Some(id.clone()),
+                };
                 Some(MacroHandle::Simple(frame))
             },
             MacroKind::ObjectMacro { index, file_id, end } => {
-                let frame = Frame::ObjectMacro { file_id, index, end, macro_id };
+                let frame = Frame::ObjectMacro { file_id, index, end, id: id.clone() };
                 Some(MacroHandle::Simple(frame))
             },
             MacroKind::FuncMacro { ref param_ids, .. } => {
                 let param_count = param_ids.len();
                 if let Some(&TokenKind::LParen) = self.preview_next_kind(true) {
-                    Some(MacroHandle::FuncMacro { macro_id, param_count })
+                    Some(MacroHandle::FuncMacro { id: id.clone(), param_count })
                 } else {
                     None
                 }
@@ -374,8 +377,8 @@ impl<'a> FrameStack<'a> {
                 // Add the frame that was already calculated.
                 self.frames.push_front(frame)
             },
-            MacroHandle::FuncMacro { macro_id, param_count } => {
-                self.handle_function_macro(macro_id, param_count, errors)?;
+            MacroHandle::FuncMacro { id, param_count } => {
+                self.handle_function_macro(id, param_count, errors)?;
             },
         }
         Ok(())
@@ -383,7 +386,7 @@ impl<'a> FrameStack<'a> {
 
     fn handle_function_macro(
         &mut self,
-        macro_id: usize,
+        id: CachedString,
         param_count: usize,
         errors: Receiver,
     ) -> MayUnwind<()> {
@@ -397,8 +400,8 @@ impl<'a> FrameStack<'a> {
             index,
             end,
             ref param_ids,
-            var_arg,
-        } = self.macros[&macro_id]
+            ref var_arg,
+        } = self.macros[&id]
         {
             let id_count = param_ids.len();
             let param_count = param_tokens.len();
@@ -409,24 +412,24 @@ impl<'a> FrameStack<'a> {
                 None
             };
 
-            let mut param_map: HashMap<usize, Vec<Token>> =
-                param_ids.iter().copied().zip(param_tokens).collect();
+            let mut param_map: HashMap<CachedString, Vec<Token>> =
+                param_ids.iter().cloned().zip(param_tokens).collect();
             if param_count < id_count {
                 self.report_error(
                     Error::FuncInvokeMissingArgs(id_count - param_count),
                     errors,
                 )?;
                 for id in &param_ids[param_count..id_count] {
-                    param_map.insert(*id, Vec::new());
+                    param_map.insert(id.clone(), Vec::new());
                 }
             }
 
-            match (var_arg, var_arg_tokens) {
+            match (var_arg.as_ref(), var_arg_tokens) {
                 (Some(id), Some(tokens)) => {
-                    param_map.insert(id, tokens);
+                    param_map.insert(id.clone(), tokens);
                 },
                 (Some(id), None) => {
-                    param_map.insert(id, Vec::new());
+                    param_map.insert(id.clone(), Vec::new());
                 },
                 (None, Some(tokens)) => {
                     self.report_error(Error::FuncInvokeExcessParameters(tokens), errors)?;
@@ -434,7 +437,7 @@ impl<'a> FrameStack<'a> {
                 (None, None) => {},
             }
 
-            self.create_func_macro_frame(file_id, index, end, macro_id, param_map, errors)
+            self.create_func_macro_frame(file_id, index, end, id, param_map, errors)
         } else {
             panic!("Can't handle a function macro on a non-function macro.");
         }
@@ -445,8 +448,8 @@ impl<'a> FrameStack<'a> {
         file_id: FileId,
         index: usize,
         end: usize,
-        macro_id: usize,
-        params: HashMap<usize, Vec<Token>>,
+        id: CachedString,
+        params: HashMap<CachedString, Vec<Token>>,
         errors: Receiver,
     ) -> MayUnwind<()> {
         // By assuming each parameter will show up at least once, we get a good initial capacity estimation.
@@ -472,8 +475,10 @@ impl<'a> FrameStack<'a> {
                 },
                 Hash { .. } if self.frames.len() == function_frame => {
                     let loc = head.loc();
-                    let define = match self.move_forward().kind() {
-                        token if token.is_definable() => token.get_definable_id(),
+
+                    self.move_forward();
+                    let define = match self.head().kind() {
+                        token if token.is_definable() => self.env.get_definable_id(token),
                         _ => {
                             let error = Error::StringifyExpectsId(self.head().clone());
                             self.report_error(error, errors)?;
@@ -501,7 +506,7 @@ impl<'a> FrameStack<'a> {
                     }));
                 },
                 ref def if def.is_definable() && self.frames.len() == function_frame => {
-                    let param_id = def.get_definable_id();
+                    let param_id = self.env.get_definable_id(def);
                     match self.frames[0].has_parameter(param_id) {
                         Some(handle) if handle.is_empty() => {
                             let last_kind = tokens.last().map(|token| token.kind());
@@ -521,7 +526,7 @@ impl<'a> FrameStack<'a> {
                     }
                 },
                 ref def if def.is_definable() => {
-                    let macro_id = def.get_definable_id();
+                    let macro_id = self.env.get_definable_id(def);
                     if let Some(handle) = self.should_handle_macro(macro_id) {
                         self.handle_macro(handle, errors)?;
                         continue;
@@ -540,7 +545,7 @@ impl<'a> FrameStack<'a> {
             self.move_forward();
         } else {
             self.frames.push_front(Frame::FuncMacro {
-                macro_id,
+                id,
                 index: 0,
                 tokens: Arc::new(tokens),
             });
@@ -614,16 +619,21 @@ impl<'a> FrameStack<'a> {
         }
     }
     /// Returns whether the given macro_id is in the frame stack.
-    fn in_macro(&self, macro_id: usize) -> bool {
+    fn in_macro(&self, id: &CachedString) -> bool {
         for frame in &self.frames {
             let frame_macro_id = match *frame {
-                Frame::SingleToken { macro_id, .. }
-                | Frame::FuncMacro { macro_id, .. }
-                | Frame::ObjectMacro { macro_id, .. } => macro_id,
+                Frame::SingleToken { ref id, .. } => {
+                    if let Some(id) = id.as_ref() {
+                        id
+                    } else {
+                        continue;
+                    }
+                },
+                Frame::FuncMacro { ref id, .. } | Frame::ObjectMacro { ref id, .. } => id,
                 _ => continue,
             };
 
-            if frame_macro_id == macro_id {
+            if frame_macro_id == id {
                 return true;
             }
         }

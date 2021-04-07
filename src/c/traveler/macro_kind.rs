@@ -5,7 +5,10 @@ use crate::{
         traveler::Frame,
         Token,
     },
-    util::FileId,
+    util::{
+        CachedString,
+        FileId,
+    },
 };
 
 /// A enum representing the different types of macros.
@@ -36,13 +39,13 @@ pub(super) enum MacroKind {
         ///
         /// This should be the index of the [PreEnd](crate::c::CTokenKind::PreEnd).
         end: usize,
-        /// A list containing each parameter's unique id in order.
-        param_ids: Vec<usize>,
-        /// A value representing the potential unique id of the var-arg.
+        /// A list containing each parameter's id.
+        param_ids: Vec<CachedString>,
+        /// The identifier representing the variable arguments.
         /// * If this function macro doesn't have a var-arg, this will be None.
         /// * If this function macro doesn't define a name, "__VA_ARGS__" will be used.
-        /// * If a name was provided, it will be the unique id of that name.
-        var_arg: Option<usize>,
+        /// * If a name was provided, it will be that name.
+        var_arg: Option<CachedString>,
     },
 }
 
@@ -58,7 +61,10 @@ pub(super) enum MacroHandle {
     /// A function macro that must be handled.
     ///
     /// This is handled separately since it requires reading the parameter tokens.
-    FuncMacro { macro_id: usize, param_count: usize },
+    FuncMacro {
+        id: CachedString,
+        param_count: usize,
+    },
 }
 
 impl MacroHandle {

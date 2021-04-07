@@ -14,7 +14,7 @@ use crate::{
 #[variant_list]
 #[variant_names]
 #[repr(u8)]
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum Keyword {
     Auto,
     Break,

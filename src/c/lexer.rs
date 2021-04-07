@@ -488,7 +488,7 @@ impl<'a, OnInclude: IncludeCallback> LexerState<'a, OnInclude> {
         let cached = self.read_cached_identifier(first_char);
 
         if let Some(keyword) = self.env.get_keyword(&cached) {
-            return self.add_token(TokenKind::Keyword(keyword, cached.uniq_id()));
+            return self.add_token(TokenKind::Keyword(keyword));
         } else if let Some(str_type) = self.env.get_string_prefix(&cached) {
             let front_char = self.reader.front().unwrap_or('\0');
             if front_char == '"' || front_char == '\'' {
