@@ -680,6 +680,7 @@ dependencies = [
  "parking_lot",
  "rayon",
  "replace_with",
+ "smallvec",
  "thread_local",
  "unicode-normalization",
  "vase-macros",

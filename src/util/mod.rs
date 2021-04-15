@@ -7,6 +7,10 @@ pub use char_ext::{
 };
 pub use convert::Conversions;
 pub use ptr_equality::PtrEquality;
+pub use redecl_map::{
+    RedeclMap,
+    RedeclMapIndex,
+};
 pub use source_loc::{
     FileId,
     SourceLoc,
@@ -30,6 +34,7 @@ pub mod mem;
 mod char_ext;
 mod convert;
 mod ptr_equality;
+mod redecl_map;
 mod source_loc;
 mod string_builder;
 mod string_cache;
