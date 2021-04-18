@@ -5,6 +5,8 @@ use std::{
     num::NonZeroU32,
 };
 
+use crate::util::Conversions;
+
 /// A u32 that can't be it's maximum value.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct NonMaxU32(NonZeroU32);
@@ -15,6 +17,10 @@ impl NonMaxU32 {
     /// Creates a non-max if the given value is not [u32::MAX].
     pub fn new(n: u32) -> Option<NonMaxU32> {
         Some(NonMaxU32(NonZeroU32::new(!n)?))
+    }
+    /// Creates a non-max u32 if the given value is not greater than or equal to [u32::MAX].
+    pub fn new_usize(n: usize) -> Option<NonMaxU32> {
+        Self::new(n.try_into::<u32>().ok()?)
     }
     /// Creates a non-max without checking the value.
     /// # Safety
