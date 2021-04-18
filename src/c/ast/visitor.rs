@@ -11,8 +11,18 @@ pub trait ExprVisitor {
     }
     fn visit_expr(&mut self, expr: &mut Expr) -> MayUnwind<()> {
         match *expr {
+            Expr::DeclRef(ref _ref_) => todo!(),
+            Expr::String(..) => todo!(),
             Expr::Number(ref mut lit) => self.on_number(lit),
             Expr::Parens(ref mut expr) => self.on_parens(expr),
+            Expr::Init(_) => todo!(),  // TODO: ?
+            Expr::Block(_) => todo!(), // TODO: DO
+            Expr::Suffix(_) => todo!(),
+            Expr::Access(_) => todo!(), // TODO: ?
+            Expr::Array(_) => todo!(),
+            Expr::Call(_) => todo!(),
+            Expr::Type(..) => todo!(),
+            Expr::Cast(ref mut expr) => self.on_cast(expr),
             Expr::Prefix(ref mut expr) => self.on_prefix(expr),
             Expr::Binary(ref mut expr) => self.on_binary(expr),
             Expr::Ternary(ref mut expr) => self.on_ternary(expr),
@@ -28,6 +38,13 @@ pub trait ExprVisitor {
         self.visit_parens(expr)
     }
     fn visit_parens(&mut self, expr: &mut ParenExpr) -> MayUnwind<()> {
+        self.on_expr(&mut expr.expr)
+    }
+
+    fn on_cast(&mut self, expr: &mut CastExpr) -> MayUnwind<()> {
+        self.visit_cast(expr)
+    }
+    fn visit_cast(&mut self, expr: &mut CastExpr) -> MayUnwind<()> {
         self.on_expr(&mut expr.expr)
     }
 

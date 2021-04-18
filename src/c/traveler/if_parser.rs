@@ -65,11 +65,6 @@ impl<'a, 'b, E: ErrorReceiver<TravelerError>> IfParser<'a, 'b, E> {
             } else {
                 expr = match *head.kind() {
                     QMark => self.parse_ternary(expr)?,
-                    Comma => {
-                        self.report_error(Error::CommaInIfCondition)?;
-                        self.move_forward()?;
-                        self.parse_expression()?
-                    },
                     Colon | RParen | PreEnd => break,
                     _ => {
                         let error = Error::IfExpectedOp(self.if_token.clone(), head.clone());

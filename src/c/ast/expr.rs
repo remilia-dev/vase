@@ -1,27 +1,38 @@
 // Copyright 2021. remilia-dev
 // This source code is licensed under GPLv3 or any later version.
+use smallvec::SmallVec;
+
 use crate::{
     c::{
-        ast::{
-            AssignOp,
-            Associativity,
-            BinaryOp,
-            Number,
-            Precedence,
-            PrefixOp,
-        },
+        ast::*,
         TravelIndex,
         TravelRange,
     },
-    util::create_intos,
+    util::{
+        create_intos,
+        CachedString,
+    },
 };
 
 #[create_intos]
 #[derive(Clone, Debug)]
 pub enum Expr {
+    // Atoms:
+    DeclRef(DeclRefExpr),
     Number(Number),
+    String(StringLiteral),
+    Block(BlockExpr),
     Parens(ParenExpr),
+    Init(InitExpr),
+    // Suffixes:
+    Suffix(SuffixExpr),
+    Access(AccessExpr),
+    Array(ArrayExpr),
+    Call(CallExpr),
+    // Other:
+    Type(TypeExpr),
     Prefix(PrefixExpr),
+    Cast(CastExpr),
     Binary(BinaryExpr),
     Ternary(TernaryExpr),
     Assign(AssignExpr),
@@ -31,9 +42,14 @@ impl Expr {
     pub fn precedence(&self) -> Precedence {
         use Expr::*;
         match *self {
-            Number(..) | Parens(..) => Precedence::Atoms,
-            Binary(ref expr) => expr.op.precedence(),
+            DeclRef(..) | Number(..) | String(..) | Block(..) | Parens(..) | Init(..) => {
+                Precedence::Atoms
+            },
+            Suffix(..) | Access(..) | Array(..) | Call(..) => Precedence::Suffixes,
+            Type(ref expr) => expr.precedence(),
             Prefix(..) => Precedence::Prefixes,
+            Cast(..) => Precedence::Prefixes,
+            Binary(ref expr) => expr.op.precedence(),
             Ternary(..) => Precedence::Ternary,
             Assign(..) => Precedence::Assignment,
         }
@@ -65,25 +81,97 @@ impl Expr {
     where T: FnOnce(Box<Expr>) -> Box<Expr> {
         use replace_with::replace_with_or_abort as replace_or_abort;
         let replace_with = |rhs: Box<Expr>| rhs.add_op(precedence, create);
-        match *self {
-            Self::Number(..) => panic!("Can't take right on a number. It makes no sense!"),
-            Self::Parens(..) => panic!("Can't take right on parenthesis. It makes no sense!"),
-            Self::Prefix(ref mut expr) => replace_or_abort(&mut expr.expr, replace_with),
-            Self::Binary(ref mut expr) => replace_or_abort(&mut expr.rhs, replace_with),
-            Self::Ternary(ref mut expr) => replace_or_abort(&mut expr.if_false, replace_with),
-            Self::Assign(ref mut expr) => replace_or_abort(&mut expr.value, replace_with),
-        }
+        use Expr::*;
+        let right_item = match *self {
+            DeclRef(..) | Number(..) | String(..) | Block(..) | Parens(..) | Init(..) => panic!(
+                "Can't take right on an atom (identifier/number/string/block/paren) expression."
+            ),
+            Suffix(..) | Access(..) | Array(..) | Call(..) => {
+                panic!("Can't take right on a suffix expression.");
+            },
+            Type(ref mut expr) => expr.get_right(),
+            Prefix(ref mut expr) => &mut expr.expr,
+            Cast(ref mut expr) => &mut expr.expr,
+            Binary(ref mut expr) => &mut expr.rhs,
+            Ternary(ref mut expr) => &mut expr.if_false,
+            Assign(ref mut expr) => &mut expr.value,
+        };
+        replace_or_abort(right_item, replace_with)
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct BlockExpr {
+    /// The range of traveler indexes this expression covers.
+    ///
+    /// If parsed without error, the start index should be a LBrace token
+    /// and the end index should be a RBrace token.
+    pub range: TravelRange,
+    pub scope_id: ScopeId,
 }
 
 #[derive(Clone, Debug)]
 pub struct ParenExpr {
     /// The range of traveler indexes this expression covers.
     ///
-    /// If parsed without error, the start index should be a ( token
-    /// and the end index should be a ) token.
+    /// If parsed without error, the start index should be a LParen token
+    /// and the end index should be a RParen token.
     pub range: TravelRange,
     pub expr: Box<Expr>,
+}
+
+#[derive(Clone, Debug)]
+pub struct InitExpr {
+    pub range: TravelRange,
+    pub values: Vec<InitMember>,
+}
+
+#[derive(Clone, Debug)]
+pub enum InitMember {
+    Unnamed(Expr),
+    Named(Id, Expr),
+    Array(SmallVec<[Expr; 1]>, Expr),
+    SubInitializer(InitExpr),
+}
+
+#[derive(Clone, Debug)]
+pub struct SuffixExpr {
+    pub expr: Box<Expr>,
+    pub op: SuffixOp,
+    pub op_index: TravelIndex,
+}
+
+#[derive(Clone, Debug)]
+pub struct AccessExpr {
+    // The range of the access expression.
+    //
+    // The start index should be the Dot/Arrow token
+    pub range: TravelRange,
+    pub expr: Box<Expr>,
+    pub through_ptr: bool,
+    pub member: CachedString,
+}
+
+#[derive(Clone, Debug)]
+pub struct ArrayExpr {
+    /// The range of traveler indexes this expression covers.
+    ///
+    /// If parsed without error, the start index should be the LBracket token
+    /// and the last index the RBracket token.
+    pub range: TravelRange,
+    pub expr: Box<Expr>,
+    pub offset: Box<Expr>,
+}
+
+#[derive(Clone, Debug)]
+pub struct CallExpr {
+    /// The range of traveler indexes this expression covers.
+    ///
+    /// If parsed without error, the start index should be the LParen token
+    /// and the last index the RParen token.
+    pub range: TravelRange,
+    pub expr: Box<Expr>,
+    pub args: Vec<Expr>,
 }
 
 #[derive(Clone, Debug)]
@@ -92,6 +180,45 @@ pub struct PrefixExpr {
     /// The start index should be the operator token.
     pub range: TravelRange,
     pub op: PrefixOp,
+    pub expr: Box<Expr>,
+}
+
+#[derive(Clone, Debug)]
+pub struct TypeExpr {
+    pub range: TravelRange,
+    pub op: TypeOp,
+    pub of: TypeOrExpr,
+}
+
+impl TypeExpr {
+    fn precedence(&self) -> Precedence {
+        if matches!(self.of, TypeOrExpr::Type(..)) {
+            Precedence::Atoms
+        } else {
+            Precedence::Prefixes
+        }
+    }
+
+    fn get_right(&mut self) -> &mut Box<Expr> {
+        if let TypeOrExpr::Expr(ref mut expr) = self.of {
+            expr
+        } else {
+            panic!("Can't take right on a type atom expression (sizeof/_Alignof).")
+        }
+    }
+}
+
+#[create_intos]
+#[derive(Clone, Debug)]
+pub enum TypeOrExpr {
+    Type(Type),
+    Expr(Box<Expr>),
+}
+
+#[derive(Clone, Debug)]
+pub struct CastExpr {
+    pub range: TravelRange,
+    pub to: Type,
     pub expr: Box<Expr>,
 }
 

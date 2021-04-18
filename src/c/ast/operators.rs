@@ -69,22 +69,15 @@ pub enum PrefixOp {
     BitNot,
     Dereference,
     AddressOf,
-    SizeOf,
-    AlignOf,
 }
 
 impl std::convert::TryFrom<&TokenKind> for PrefixOp {
     type Error = ();
 
-    fn try_from(value: &TokenKind) -> Result<Self, Self::Error> {
+    fn try_from(v: &TokenKind) -> Result<Self, Self::Error> {
         use TokenKind::*;
 
-        use crate::c::Keyword::{
-            Alignof,
-            Sizeof,
-        };
-
-        Ok(match *value {
+        Ok(match *v {
             PlusPlus => Self::Increment,
             MinusMinus => Self::Decrement,
             Plus => Self::Posate,
@@ -93,8 +86,46 @@ impl std::convert::TryFrom<&TokenKind> for PrefixOp {
             Tilde => Self::BitNot,
             Star => Self::Dereference,
             Amp => Self::AddressOf,
-            Keyword(Sizeof) => Self::SizeOf,
-            Keyword(Alignof) => Self::AlignOf,
+            _ => return Err(()),
+        })
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum TypeOp {
+    AlignOf,
+    SizeOf,
+}
+
+impl std::convert::TryFrom<&TokenKind> for TypeOp {
+    type Error = ();
+
+    fn try_from(v: &TokenKind) -> Result<Self, Self::Error> {
+        use crate::c::Keyword::{
+            Alignof,
+            Sizeof,
+        };
+        Ok(match *v {
+            TokenKind::Keyword(Alignof) => Self::AlignOf,
+            TokenKind::Keyword(Sizeof) => Self::SizeOf,
+            _ => return Err(()),
+        })
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum SuffixOp {
+    Increment,
+    Decrement,
+}
+
+impl std::convert::TryFrom<&TokenKind> for SuffixOp {
+    type Error = ();
+
+    fn try_from(v: &TokenKind) -> Result<Self, Self::Error> {
+        Ok(match *v {
+            TokenKind::PlusPlus => Self::Increment,
+            TokenKind::MinusMinus => Self::Decrement,
             _ => return Err(()),
         })
     }
@@ -139,6 +170,8 @@ enum_with_properties! {
         LogicalAnd,
         #[values("||", LogicalOr)]
         LogicalOr,
+        #[values(",", Comma)]
+        Comma,
     }
 
     impl BinaryOp {
@@ -160,9 +193,9 @@ impl fmt::Display for BinaryOp {
 impl std::convert::TryFrom<&TokenKind> for BinaryOp {
     type Error = ();
 
-    fn try_from(value: &TokenKind) -> Result<Self, Self::Error> {
+    fn try_from(v: &TokenKind) -> Result<Self, Self::Error> {
         use TokenKind::*;
-        Ok(match *value {
+        Ok(match *v {
             Star => Self::Multiplication,
             Slash => Self::Divide,
             Percent => Self::Modulo,
@@ -204,9 +237,9 @@ pub enum AssignOp {
 impl std::convert::TryFrom<&TokenKind> for AssignOp {
     type Error = ();
 
-    fn try_from(kind: &TokenKind) -> Result<Self, Self::Error> {
+    fn try_from(v: &TokenKind) -> Result<Self, Self::Error> {
         use TokenKind::*;
-        Ok(match *kind {
+        Ok(match *v {
             Equal => Self::None,
             StarEqual => Self::Multiplication,
             SlashEqual => Self::Divide,
