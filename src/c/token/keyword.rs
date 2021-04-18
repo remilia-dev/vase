@@ -173,6 +173,6 @@ impl Keyword {
     }
 
     pub fn is_type_tag(self) -> bool {
-        matches!(self, Self::Struct | Self::Union)
+        matches!(self, Self::Enum | Self::Struct | Self::Union)
     }
 }

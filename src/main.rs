@@ -4,7 +4,6 @@ use std::path::Path;
 
 use vase::{
     c::*,
-    error::CodedError,
     sync::Arc,
 };
 
@@ -15,28 +14,12 @@ fn main() {
     let mut lexer = MultiLexer::new(env.clone());
     lexer.lex_multi_threaded(&*env.settings().source_files);
 
-    let mut errors = Vec::new();
-    let mut traveler = Traveler::new(env.clone(), |err| {
-        errors.push(err);
-        false
+    let mut parser = Parser::new(&env, |error: ParseError| {
+        panic!("{:?}", error);
+        //false
     });
-    let tokens = env.file_id_to_tokens()[0.into()].clone();
-    println!("{:#?}", tokens);
-    traveler.load_start(tokens).unwrap();
-
-    let mut tokens = Vec::new();
-    loop {
-        match traveler.head().kind() {
-            TokenKind::Eof => break,
-            token => {
-                tokens.push(token.clone());
-                traveler.move_forward().unwrap();
-            },
-        }
-    }
-
-    println!("{:#?}", tokens);
-    for error in errors {
-        println!("{}", error.message());
-    }
+    let tokens = env.file_id_to_tokens.get_arc(0.into()).unwrap();
+    println!("Tokens In File: {}", tokens.len());
+    let parsed = parser.parse(tokens).unwrap();
+    println!("{:#?}", parsed)
 }

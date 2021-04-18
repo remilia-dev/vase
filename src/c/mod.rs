@@ -10,6 +10,11 @@ pub use lexer_error::{
 };
 #[cfg(all(feature = "file-reading", feature = "multithreading"))]
 pub use multi_lexer::MultiLexer;
+pub use parser::{
+    ParseError,
+    ParseErrorKind,
+    Parser,
+};
 pub use settings::*;
 pub use token::*;
 pub use traveler::*;
@@ -22,6 +27,7 @@ mod lexer;
 mod lexer_error;
 #[cfg(all(feature = "file-reading", feature = "multithreading"))]
 mod multi_lexer;
+mod parser;
 mod settings;
 mod token;
 mod traveler;
